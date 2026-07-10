@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
     name="example-greeter",
-    description="MCP de exemplo que saúda — demonstra o padrão determinístico completo.",
     version="0.1.0"
 )
 

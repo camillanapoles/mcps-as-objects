@@ -11,7 +11,6 @@ from core import check_requirements as _check_requirements
 
 mcp = FastMCP(
     name="python-termux-builder",
-    description="Gerencia dependências Python no Termux/Android — detecta incompatibilidades e constrói wheels aarch64 externamente.",
     version="0.1.0"
 )
 

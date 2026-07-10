@@ -13,7 +13,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Processador de Texto",
-    description="Analisa e processa textos — exemplo de MCP replicável",
     version="0.1.0"
 )
 
