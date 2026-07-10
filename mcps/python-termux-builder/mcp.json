@@ -1,0 +1,274 @@
+{
+  "id": "python-termux-builder",
+  "name": "Python Termux Builder",
+  "version": "0.1.0",
+  "description": "Gerencia dependências Python no Termux/Android — detecta pacotes com C/Rust que não compilam nativamente e usa GitHub Actions para buildar wheels aarch64 externamente.",
+  "entry": "src/server.py",
+  "runtime": {
+    "language": "python",
+    "image": "ubuntu-22.04",
+    "estimated_duration_sec": 120,
+    "dependencies": {
+      "python": "requirements.txt"
+    }
+  },
+  "functions": [
+    {
+      "name": "check_package",
+      "description": "Verifica se um pacote Python pode ser instalado em Termux. Analisa o tipo de extensão (pure Python, C, Rust) e informa se precisa de wheel externo.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "package_name": {
+            "type": "string",
+            "description": "Nome do pacote PyPI (ex: 'jsonschema', 'rpds-py')."
+          },
+          "python_version": {
+            "type": "string",
+            "enum": [
+              "3.11",
+              "3.12",
+              "3.13"
+            ],
+            "default": "3.12",
+            "description": "Versão do Python no Termux."
+          }
+        },
+        "required": [
+          "package_name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "package": {
+            "type": "string"
+          },
+          "compatible": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "pure-python",
+              "c-ext",
+              "rust-ext",
+              "unknown"
+            ]
+          },
+          "needs_external_build": {
+            "type": "boolean"
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "python_version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "package",
+          "compatible",
+          "type",
+          "needs_external_build",
+          "python_version"
+        ]
+      }
+    },
+    {
+      "name": "build_wheel",
+      "description": "Dispara build externo de wheel aarch64 para Android via GitHub Actions. Usa gh CLI e o repositório android-wheel-factory.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "package_name": {
+            "type": "string",
+            "description": "Nome do pacote PyPI."
+          },
+          "package_version": {
+            "type": "string",
+            "description": "Versão específica (opcional — usa latest se vazio).",
+            "default": ""
+          },
+          "python_version": {
+            "type": "string",
+            "enum": [
+              "3.11",
+              "3.12"
+            ],
+            "default": "3.12",
+            "description": "Versão do Python alvo."
+          }
+        },
+        "required": [
+          "package_name"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "python_version": {
+            "type": "string"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "run_url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "action",
+          "package",
+          "python_version"
+        ]
+      }
+    },
+    {
+      "name": "list_cached_wheels",
+      "description": "Lista wheels Android disponíveis no cache local.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "package_name": {
+            "type": "string",
+            "description": "Filtrar por nome do pacote (opcional — listar todos se vazio).",
+            "default": ""
+          }
+        },
+        "required": []
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "wheels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "package": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "python_version": {
+                  "type": "string"
+                },
+                "arch": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wheels",
+          "total"
+        ]
+      }
+    },
+    {
+      "name": "check_requirements",
+      "description": "Analisa um arquivo requirements.txt e reporta quais pacotes são compatíveis com Termux e quais precisam de wheel externo.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "requirements_text": {
+            "type": "string",
+            "description": "Conteúdo do requirements.txt (multiline)."
+          }
+        },
+        "required": [
+          "requirements_text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "total_packages": {
+            "type": "integer"
+          },
+          "compatible": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "needs_build": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "total_packages",
+          "compatible",
+          "needs_build",
+          "summary"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    "network:read",
+    "exec:shell"
+  ],
+  "pipeline": {
+    "consumes": [],
+    "produces": [
+      "python-termux-builder.check_package",
+      "python-termux-builder.build_wheel",
+      "python-termux-builder.list_cached_wheels",
+      "python-termux-builder.check_requirements"
+    ]
+  },
+  "tags": [
+    "termux",
+    "android",
+    "python",
+    "wheels",
+    "builder"
+  ]
+}

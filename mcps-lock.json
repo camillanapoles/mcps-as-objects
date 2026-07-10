@@ -10,6 +10,11 @@
       "version": "0.1.0",
       "manifest_hash": "971dd1a1a89d8cf7dc3a9ba0ae9b127a50aa3d05d0188607512456feb32e3ee5",
       "deps_hash": ""
+    },
+    "python-termux-builder": {
+      "version": "0.1.0",
+      "manifest_hash": "f1234fc1f9e078703474bd013341404b991a5422a9576baadc84812f19047bb1",
+      "deps_hash": ""
     }
   }
 }
