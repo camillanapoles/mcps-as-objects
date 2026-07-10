@@ -13,7 +13,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
     name="Processador de Texto",
-    version="0.1.0"
 )
 
 

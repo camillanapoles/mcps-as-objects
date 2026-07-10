@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
     name="example-greeter",
-    version="0.1.0"
 )
 
 SAUDS = {

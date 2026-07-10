@@ -11,7 +11,6 @@ from core import check_requirements as _check_requirements
 
 mcp = FastMCP(
     name="python-termux-builder",
-    version="0.1.0"
 )
 
 

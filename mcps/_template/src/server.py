@@ -13,7 +13,6 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP(
     name="{{ MCP_NAME }}",
-    version="{{ MCP_VERSION }}"
 )
 
 

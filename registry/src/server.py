@@ -15,8 +15,6 @@ import db, crud, catalog, constructor, validator, snapshot
 
 mcp = FastMCP(
     name="mcps-as-objects",
-    description="Registry de MCPs determinístico — gestão, catálogo e composição.",
-    version="0.1.0"
 )
 
 
