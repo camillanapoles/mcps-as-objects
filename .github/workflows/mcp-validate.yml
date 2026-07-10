@@ -1,0 +1,111 @@
+# ═══════════════════════════════════════════════════════════════════
+# mcp-validate.yml — CI: validação determinística de manifestos.
+#
+# Bloqueia PRs com manifestos MCP inválidos.
+# Roda em todo push que mexa em mcps/ ou schemas/.
+# ═══════════════════════════════════════════════════════════════════
+
+name: MCP Validate
+
+on:
+  pull_request:
+    paths:
+      - 'mcps/**/mcp.json'
+      - 'schemas/*.json'
+      - 'mcps-lock.json'
+  push:
+    branches: [main]
+    paths:
+      - 'mcps/**/mcp.json'
+      - 'schemas/*.json'
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  validate:
+    name: Validate Manifestos
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip -q
+          pip install jsonschema -q
+          pip install mcp -q
+
+      - name: Validate all manifests
+        id: validate
+        run: |
+          python3 -c "
+            import sys, json
+            sys.path.insert(0, 'registry/src')
+            from validator import validate_manifest_file
+            from catalog import list_mcp_ids
+
+            ids = list_mcp_ids()
+            if not ids:
+                print('Nenhum MCP para validar')
+                sys.exit(0)
+
+            errors = 0
+            for mid in ids:
+                path = f'mcps/{mid}/mcp.json'
+                valido, erros = validate_manifest_file(path)
+                if valido:
+                    print(f'  ✓ {mid}')
+                else:
+                    print(f'  ✗ {mid}:')
+                    for e in erros:
+                        print(f'      • {e}')
+                    errors += 1
+
+            if errors:
+                print(f'\n  {errors} MCP(s) com erros!')
+                sys.exit(1)
+            print(f'\n  Todos os {len(ids)} MCP(s) válidos.')
+          "
+
+      - name: Validate lockfile consistency
+        run: |
+          python3 -c "
+            import sys, json
+            sys.path.insert(0, 'registry/src')
+            from catalog import list_mcp_ids, read_manifest, manifest_hash, read_lockfile
+
+            lock = read_lockfile()
+            lock_entries = lock.get('entries', {})
+            filesystem_ids = set(list_mcp_ids())
+            lock_ids = set(lock_entries.keys())
+
+            # Verifica MCPs no filesystem que não estão no lock
+            missing_in_lock = filesystem_ids - lock_ids
+            if missing_in_lock:
+                print(f'! MCPs sem entrada no lockfile: {missing_in_lock}')
+                print(f'  Execute: tools/mcpsctl lock')
+                # Não falha, apenas avisa
+                # sys.exit(1)
+
+            # Verifica hashes
+            issues = 0
+            for mid in sorted(filesystem_ids):
+                h = manifest_hash(mid)
+                man = read_manifest(mid)
+                if man and mid in lock_entries:
+                    locked = lock_entries[mid]
+                    if locked.get('manifest_hash') != h:
+                        print(f'! {mid}: hash diverge. Lock={locked.get(\"manifest_hash\",\"?\")[:16]}... Atual={h[:16]}...')
+                        issues += 1
+
+            if issues:
+                print(f'\n  {issues} MCP(s) com hash desatualizado.')
+                sys.exit(1)
+            print('  ✓ Lockfile consistente com filesystem.')
+          "

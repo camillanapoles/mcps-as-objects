@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCP Manifest",
+  "description": "Contrato único que define um MCP no registry. Toda estrutura, nomenclatura e runtime derivam deste schema. Validar em runtime e no CI.",
+  "type": "object",
+  "required": ["id", "name", "version", "description", "entry", "runtime", "functions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Identificador único do MCP. kebab-case. Usado como chave primária e nome de diretório.",
+      "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$",
+      "minLength": 2,
+      "maxLength": 64
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "version": {
+      "type": "string",
+      "description": "Semver. Parte da cache key.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.-]+)?(\\+[a-z0-9.-]+)?$"
+    },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "entry": {
+      "type": "string",
+      "description": "Caminho relativo do entrypoint do servidor MCP.",
+      "pattern": "^src/.+\\.(py|js|ts|go)$"
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["language", "image"],
+      "additionalProperties": false,
+      "properties": {
+        "language": { "enum": ["python", "node", "go"] },
+        "image": { "type": "string", "description": "Imagem base do runner (Docker ou ubuntu-22.04 etc)." },
+        "estimated_duration_sec": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "dependencies": {
+          "type": "object",
+          "description": "Mapa linguagem->arquivo de lock (requirements.txt, package-lock.json, go.sum).",
+          "properties": {
+            "python": { "type": "string" },
+            "node": { "type": "string" },
+            "go": { "type": "string" }
+          }
+        }
+      }
+    },
+    "functions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "input_schema", "output_schema"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "snake_case. Nome da função exposta pelo MCP server.",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "input_schema":  { "type": "object", "description": "JSON Schema do input." },
+          "output_schema": { "type": "object", "description": "JSON Schema do output." }
+        }
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "network:read", "network:write",
+          "fs:read:workspace", "fs:write:workspace",
+          "exec:shell", "cache:read", "cache:write"
+        ]
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "description": "Composição: o que este MCP consome e produz.",
+      "additionalProperties": false,
+      "properties": {
+        "consumes": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*$" } },
+        "produces": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*$" } }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+    }
+  }
+}

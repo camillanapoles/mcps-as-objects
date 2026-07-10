@@ -1,0 +1,64 @@
+{
+  "id": "example-greeter",
+  "name": "Example Greeter",
+  "version": "0.1.0",
+  "description": "MCP de exemplo que saúda — demonstra o padrão determinístico completo.",
+  "entry": "src/server.py",
+  "runtime": {
+    "language": "python",
+    "image": "ubuntu-22.04",
+    "estimated_duration_sec": 30,
+    "dependencies": {
+      "python": "requirements.txt"
+    }
+  },
+  "functions": [
+    {
+      "name": "greet",
+      "description": "Gera uma saudação personalizada.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Nome da pessoa." },
+          "lang": { "type": "string", "enum": ["pt", "en", "es"], "default": "pt", "description": "Idioma" }
+        },
+        "required": ["name"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "greeting": { "type": "string" },
+          "lang": { "type": "string" },
+          "timestamp": { "type": "string" }
+        },
+        "required": ["greeting", "lang", "timestamp"]
+      }
+    },
+    {
+      "name": "sum",
+      "description": "Soma dois números — exemplo de função com input numérico.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "a": { "type": "number", "description": "Primeiro número" },
+          "b": { "type": "number", "description": "Segundo número" }
+        },
+        "required": ["a", "b"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": { "type": "number" },
+          "operation": { "type": "string" }
+        },
+        "required": ["result", "operation"]
+      }
+    }
+  ],
+  "permissions": [],
+  "pipeline": {
+    "consumes": [],
+    "produces": ["example-greeter.greet", "example-greeter.sum"]
+  },
+  "tags": ["example", "demo"]
+}

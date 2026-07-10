@@ -1,0 +1,89 @@
+# ═══════════════════════════════════════════════════════════════════
+# mcp-cache.yml — Build/atualização do snapshot de máquina montada.
+#
+# Executa pré-carga das dependências e gera o cache snapshot
+# que será usado pelo mcp-runtime.yml, economizando ~2-3min
+# por execução.
+# ═══════════════════════════════════════════════════════════════════
+
+name: MCP Cache (Snapshot Build)
+
+on:
+  schedule:
+    # Reconstrói cache semanalmente
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'requirements.txt'
+      - 'mcps-lock.json'
+      - 'mcps/**/mcp.json'
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-snapshot:
+    name: Build Snapshot
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compute cache key
+        id: key
+        run: |
+          KEY=$(python3 -c "
+            import hashlib
+            lock = open('mcps-lock.json','rb').read() if __import__('os').path.exists('mcps-lock.json') else b'{}'
+            h = hashlib.sha256(lock).hexdigest()
+            print(f'mcp-snapshot-v1-{h}-$(uname -a | sha256sum | head -c 12)')
+          ")
+          echo "full-key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "restore-key=mcp-snapshot-v1-" >> "$GITHUB_OUTPUT"
+
+      - name: Cache check
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            registry/data/registry.db
+            .cache/snapshot
+          key: ${{ steps.key.outputs.full-key }}
+          restore-keys: |
+            ${{ steps.key.outputs.restore-key }}
+
+      - name: Build full snapshot
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          # Virtualenv e deps
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip -q
+          .venv/bin/pip install -r requirements.txt -q
+
+          # DB com registro de todos os MCPs
+          mkdir -p registry/data
+          .venv/bin/python3 -c "
+            import sys; sys.path.insert(0, 'registry/src')
+            from db import get_conn
+            from crud import scan_and_register_all
+            conn = get_conn()
+            count = scan_and_register_all(conn)
+            print(f'DB: {count} MCPs registrados')
+            conn.close()
+          "
+
+          # Salva no diretório de cache
+          mkdir -p .cache/snapshot
+          cp -a .venv .cache/snapshot/.venv
+          cp -a registry/data/registry.db .cache/snapshot/registry/data/
+          cp mcps-lock.json .cache/snapshot/
+
+          echo "✓ Snapshot salvo no cache"

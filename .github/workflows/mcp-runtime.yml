@@ -1,0 +1,241 @@
+# ═══════════════════════════════════════════════════════════════════
+# mcp-runtime.yml — Workflow principal de execução.
+#
+# Design:
+#   - Cada MCP é uma "máquina isolada" executando em seu próprio job.
+#   - O registry (API) roda primeiro e expõe o catálogo.
+#   - Workers executam em matrix, cada um lendo seu manifesto e executando.
+#   - Coleta final consolida resultados.
+#   - Cache inteligente: restaura snapshot se lockfile não mudou.
+# ═══════════════════════════════════════════════════════════════════
+
+name: MCP Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      mcp_ids:
+        description: 'MCPs para executar (separados por vírgula, vazio = todos)'
+        required: false
+        type: string
+      input_payload:
+        description: 'Payload de entrada JSON (opcional)'
+        required: false
+        type: string
+        default: '{}'
+
+env:
+  PYTHON_VERSION: '3.12'
+  REGISTRY_PORT: 8712
+
+jobs:
+  # ── 1. REGISTRY ────────────────────────────────────────────────
+  registry:
+    name: Registry
+    runs-on: ubuntu-22.04
+    outputs:
+      cache_key: ${{ steps.snapshot-key.outputs.key }}
+      mcp_ids: ${{ steps.list-mcps.outputs.ids }}
+      manifest_hashes: ${{ steps.list-mcps.outputs.hashes }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore snapshot (cache inteligente)
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            registry/data/registry.db
+            .cache/snapshot
+          key: ${{ steps.compute-key.outputs.key }}
+          restore-keys: |
+            mcp-snapshot-v1-
+
+      - name: Compute snapshot key
+        id: compute-key
+        run: |
+          KEY=$(python3 -c "
+            import hashlib
+            lock = open('mcps-lock.json','rb').read() if __import__('os').path.exists('mcps-lock.json') else b'{}'
+            h = hashlib.sha256(lock).hexdigest()
+            print(f'mcp-snapshot-v1-{h}-$(uname -a | sha256sum | head -c 12)')
+          ")
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Snapshot key: $KEY"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --upgrade pip -q
+          .venv/bin/pip install -r requirements.txt -q
+
+      - name: Build DB snapshot
+        run: |
+          mkdir -p registry/data
+          .venv/bin/python3 -c "
+            import sys; sys.path.insert(0, 'registry/src')
+            from db import get_conn
+            from crud import scan_and_register_all
+            conn = get_conn()
+            scan_and_register_all(conn)
+            print('DB snapshot ready')
+          "
+
+      - name: List MCPs
+        id: list-mcps
+        run: |
+          .venv/bin/python3 -c "
+            import sys; sys.path.insert(0, 'registry/src')
+            from catalog import list_mcp_ids, read_manifest
+            ids = list_mcp_ids()
+            print(f'ids={",".join(ids)}')
+            hashes = {}
+            for mid in ids:
+                man = read_manifest(mid)
+                if man:
+                    hashes[mid] = man.get('version','0.0.0')
+            print(f'hashes={json.dumps(hashes)}')
+          " >> "$GITHUB_OUTPUT"
+
+      - name: Save snapshot after cache miss
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache/snapshot
+          cp -a .venv .cache/snapshot/.venv 2>/dev/null || true
+          cp -a registry/data/registry.db .cache/snapshot/registry/data/ 2>/dev/null || true
+          cp mcps-lock.json .cache/snapshot/
+
+  # ── 2. WORKERS (MATRIX) ────────────────────────────────────────
+  worker:
+    name: Worker ${{ matrix.mcp_id }}
+    runs-on: ubuntu-22.04
+    needs: registry
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp_id: ${{ fromJSON(needs.registry.outputs.mcp_ids) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore snapshot
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            registry/data/registry.db
+            .cache/snapshot
+          key: ${{ needs.registry.outputs.cache_key }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Execute MCP function
+        id: execute
+        run: |
+          .venv/bin/python3 -c "
+            import sys; sys.path.insert(0, 'registry/src')
+            from catalog import read_manifest
+            import json
+
+            mcp_id = '${{ matrix.mcp_id }}'
+            man = read_manifest(mcp_id)
+            if not man:
+                print(f'Manifesto {mcp_id} não encontrado')
+                sys.exit(1)
+
+            # Executa cada função do MCP
+            results = {}
+            for fn in man.get('functions', []):
+                fn_name = fn['name']
+                print(f'  Rodando {mcp_id}.{fn_name}...')
+
+                try:
+                    import importlib.util
+                    server_path = f'mcps/{mcp_id}/src/server.py'
+                    spec = importlib.util.spec_from_file_location(f'mcp_{mcp_id}', server_path)
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        sys.modules[spec.name] = mod
+                        spec.loader.exec_module(mod)
+                        func = getattr(mod, fn_name, None)
+                        if func:
+                            # Cria input mínimo baseado no schema
+                            inp = {}
+                            inp_schema = fn.get('input_schema', {})
+                            for req in inp_schema.get('required', []):
+                                if req in inp_schema.get('properties', {}):
+                                    prop = inp_schema['properties'][req]
+                                    if 'default' in prop:
+                                        inp[req] = prop['default']
+                                    elif prop.get('type') == 'string':
+                                        inp[req] = 'auto'
+                                    elif prop.get('type') == 'number':
+                                        inp[req] = 0
+                                    elif prop.get('type') == 'integer':
+                                        inp[req] = 0
+                                    elif prop.get('type') == 'boolean':
+                                        inp[req] = False
+                            result = func(**inp)
+                            results[fn_name] = {'status': 'ok', 'result': result}
+                        else:
+                            results[fn_name] = {'status': 'error', 'error': 'Função não encontrada no módulo'}
+                    else:
+                        results[fn_name] = {'status': 'error', 'error': 'Falha ao carregar servidor'}
+                except Exception as exc:
+                    results[fn_name] = {'status': 'error', 'error': str(exc)}
+
+            print(f'Resultados:')
+            print(json.dumps(results, indent=2))
+            with open(f'{mcp_id}_output.json', 'w') as f:
+                json.dump(results, f, indent=2)
+          "
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-${{ matrix.mcp_id }}
+          path: ${{ matrix.mcp_id }}_output.json
+
+  # ── 3. COLLECT ─────────────────────────────────────────────────
+  collect:
+    name: Collect Results
+    runs-on: ubuntu-22.04
+    needs: worker
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Consolidate
+        run: |
+          python3 -c "
+            import json, glob
+            all_results = {}
+            for f in glob.glob('output-*/output-*.json') + glob.glob('output-*.json'):
+                data = json.load(open(f))
+                name = f.split('_')[0] if '_' in f else f
+                all_results[name] = data
+            with open('_results.json', 'w') as out:
+                json.dump(all_results, out, indent=2)
+            print(f'Consolidado: {len(all_results)} MCP(s)')
+          "
+
+      - name: Upload consolidated
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-consolidated
+          path: _results.json

@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MCPs Lockfile Schema",
+  "description": "Define mcps-lock.json — a fonte da verdade para cache keys e reconstrução determinística.",
+  "type": "object",
+  "required": ["version", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Formato do lockfile. Atualmente 1.",
+      "enum": [1]
+    },
+    "entries": {
+      "type": "object",
+      "minProperties": 0,
+      "patternProperties": {
+        "^[a-z][a-z0-9-]*[a-z0-9]$": {
+          "type": "object",
+          "required": ["version", "manifest_hash"],
+          "additionalProperties": false,
+          "properties": {
+            "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+" },
+            "manifest_hash": {
+              "type": "string",
+              "description": "SHA-256 do mcp.json, usado na cache key.",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "deps_hash": {
+              "type": "string",
+              "description": "SHA-256 dos arquivos de dependências (requirements.txt, package-lock.json, etc). Opcional.",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VENV="${ROOT}/.venv"
+PY="${VENV}/bin/python3"
+
+if [ ! -f "$PY" ]; then
+  echo "[!] Virtualenv não encontrado. Execute: make install" >&2
+  echo "    Ou: python3 -m venv ${VENV} && ${VENV}/bin/pip install -r ${ROOT}/requirements.txt" >&2
+  exit 1
+fi
+
+export PYTHONPATH="${ROOT}/registry/src:${PYTHONPATH:-}"
+exec "$PY" -m registry.src.cli "$@"

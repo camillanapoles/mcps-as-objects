@@ -1,0 +1,21 @@
+[project]
+name = "mcps-as-objects"
+version = "0.1.0"
+description = "Gestão determinística de MCPs como objetos — runtime em GitHub Actions com SQLite + API"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "mcp>=1.0.0",
+    "pydantic>=2.5.0",
+    "jsonschema>=2.19.0",
+    "typer>=0.12.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+mcpsctl = "registry.src.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["registry/tests", "mcps"]
+python_files = ["test_*.py"]

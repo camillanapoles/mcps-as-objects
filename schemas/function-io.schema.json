@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Function I/O Schema",
+  "description": "Schemas de entrada/saída para funções MCP. Cada MCP deve definir input_schema e output_schema válidos.",
+  "definitions": {
+    "input_schema": {
+      "type": "object",
+      "description": "JSON Schema que valida o payload de entrada da função.",
+      "additionalProperties": true,
+      "required": ["type", "properties"],
+      "properties": {
+        "type": { "enum": ["object"] },
+        "properties": { "type": "object" },
+        "required":  { "type": "array", "items": { "type": "string" } },
+        "additionalProperties": { "type": "boolean" }
+      }
+    },
+    "output_schema": {
+      "type": "object",
+      "description": "JSON Schema que valida o payload de saída da função.",
+      "additionalProperties": true,
+      "properties": {
+        "type": { "enum": ["object", "array", "string", "number", "boolean"] }
+      }
+    }
+  }
+}
