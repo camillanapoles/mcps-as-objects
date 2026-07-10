@@ -165,6 +165,7 @@ def build_wheel(package_name: str, package_version: str = "",
     try:
         cmd = [
             "gh", "workflow", "run", GH_WORKFLOW,
+            "--repo", GH_REPO,
             "-f", f"python_version={python_version}",
             "-f", f"package_name={pkg}",
         ]
@@ -189,7 +190,7 @@ def build_wheel(package_name: str, package_version: str = "",
         "run_id": "", "run_url": "", "status": "unknown",
         "error": (
             "gh CLI não disponível. Para build manual:\n"
-            f"  gh workflow run {GH_WORKFLOW} -f python_version={python_version} -f package_name={pkg}\n"
+            f"  gh workflow run {GH_WORKFLOW} --repo {GH_REPO} -f python_version={python_version} -f package_name={pkg}\n"
             f"  gh run download <run-id> --repo={GH_REPO} -n wheels --dir {CACHE_DIR}"
         )
     }
