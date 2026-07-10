@@ -34,24 +34,12 @@ jobs:
     name: Registry
     runs-on: ubuntu-22.04
     outputs:
-      cache_key: ${{ steps.snapshot-key.outputs.key }}
+      cache_key: ${{ steps.compute-key.outputs.key }}
       mcp_ids: ${{ steps.list-mcps.outputs.ids }}
       manifest_hashes: ${{ steps.list-mcps.outputs.hashes }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Restore snapshot (cache inteligente)
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            .venv
-            registry/data/registry.db
-            .cache/snapshot
-          key: ${{ steps.compute-key.outputs.key }}
-          restore-keys: |
-            mcp-snapshot-v1-
 
       - name: Compute snapshot key
         id: compute-key
@@ -64,6 +52,18 @@ jobs:
           ")
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Snapshot key: $KEY"
+
+      - name: Restore snapshot (cache inteligente)
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            registry/data/registry.db
+            .cache/snapshot
+          key: ${{ steps.compute-key.outputs.key }}
+          restore-keys: |
+            mcp-snapshot-v1-
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -93,10 +93,12 @@ jobs:
         id: list-mcps
         run: |
           .venv/bin/python3 -c "
-            import sys; sys.path.insert(0, 'registry/src')
+            import sys, json
+            sys.path.insert(0, 'registry/src')
             from catalog import list_mcp_ids, read_manifest
             ids = list_mcp_ids()
-            print(f'ids={",".join(ids)}')
+            # Output must be JSON array for fromJSON
+            print(f'ids={json.dumps(ids)}')
             hashes = {}
             for mid in ids:
                 man = read_manifest(mid)
@@ -153,6 +155,11 @@ jobs:
             if not man:
                 print(f'Manifesto {mcp_id} não encontrado')
                 sys.exit(1)
+
+            # Adiciona o src/ do MCP ao path (para imports como 'from core import ...')
+            mcp_src = f'mcps/{mcp_id}/src'
+            if mcp_src not in sys.path:
+                sys.path.insert(0, mcp_src)
 
             # Executa cada função do MCP
             results = {}
@@ -223,15 +230,26 @@ jobs:
       - name: Consolidate
         run: |
           python3 -c "
-            import json, glob
+            import json, glob, os
             all_results = {}
-            for f in glob.glob('output-*/output-*.json') + glob.glob('output-*.json'):
-                data = json.load(open(f))
-                name = f.split('_')[0] if '_' in f else f
-                all_results[name] = data
+            # Procura arquivos _output.json dentro de diretórios output-*
+            for dirpath, dirnames, filenames in os.walk('.'):
+                for fn in filenames:
+                    if fn.endswith('_output.json'):
+                        fpath = os.path.join(dirpath, fn)
+                        # Extrai mcp_id do nome do arquivo: example-greeter_output.json
+                        mcp_id = fn.replace('_output.json','')
+                        try:
+                            data = json.load(open(fpath))
+                            all_results[mcp_id] = data
+                        except Exception as exc:
+                            all_results[mcp_id] = {'error': str(exc)}
             with open('_results.json', 'w') as out:
                 json.dump(all_results, out, indent=2)
             print(f'Consolidado: {len(all_results)} MCP(s)')
+            for mid, res in all_results.items():
+                statuses = [v.get(\"status\",'?' ) for k,v in (res.items() if isinstance(res, dict) else {}.items())]
+                print(f'  {mid}: {statuses}' if isinstance(res, dict) else f'  {mid}: {res}')
           "
 
       - name: Upload consolidated
