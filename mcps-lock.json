@@ -5,6 +5,11 @@
       "version": "0.1.0",
       "manifest_hash": "0000000000000000000000000000000000000000000000000000000000000000",
       "deps_hash": ""
+    },
+    "processador-texto": {
+      "version": "0.1.0",
+      "manifest_hash": "971dd1a1a89d8cf7dc3a9ba0ae9b127a50aa3d05d0188607512456feb32e3ee5",
+      "deps_hash": ""
     }
   }
 }

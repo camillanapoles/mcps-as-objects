@@ -11,7 +11,7 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from . import db, crud, catalog, constructor, validator, snapshot
+import db, crud, catalog, constructor, validator, snapshot
 
 mcp = FastMCP(
     name="mcps-as-objects",
@@ -152,7 +152,7 @@ def cache_key() -> str:
 @mcp.tool()
 def pipeline_info() -> dict:
     """Retorna informações de pipeline (DAG de dependências)."""
-    from .composer import build_graph_from_manifests
+    from composer import build_graph_from_manifests
     mans = catalog.scan_catalog()
     graph = build_graph_from_manifests(mans)
     return {

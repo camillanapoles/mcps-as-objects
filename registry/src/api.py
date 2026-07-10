@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import json
 
-from . import db, crud, catalog, validator, snapshot
+import db, crud, catalog, validator, snapshot
 
 app = FastAPI(
     title="MCPs as Objects — Registry API",
@@ -211,7 +211,7 @@ def snapshot_key():
 @app.get("/pipeline/graph")
 def pipeline_graph():
     """Retorna o grafo de pipeline (DAG de dependências)."""
-    from .composer import build_graph_from_manifests
+    from composer import build_graph_from_manifests
     mans = catalog.scan_catalog()
     graph = build_graph_from_manifests(mans)
     return {

@@ -6,8 +6,8 @@ Sempre em conjunto com catalog.py (filesystem) e validator.py.
 import json
 import sqlite3
 from typing import Optional, Dict, List
-from . import db
-from . import catalog
+import db
+import catalog
 
 
 # ── MCPs ──────────────────────────────────────────────────────────
