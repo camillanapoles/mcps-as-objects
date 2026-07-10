@@ -44,12 +44,20 @@ jobs:
       - name: Compute snapshot key
         id: compute-key
         run: |
-          KEY=$(python3 -c "
-            import hashlib
-            lock = open('mcps-lock.json','rb').read() if __import__('os').path.exists('mcps-lock.json') else b'{}'
-            h = hashlib.sha256(lock).hexdigest()
-            print(f'mcp-snapshot-v1-{h}-$(uname -a | sha256sum | head -c 12)')
-          ")
+          KEY=$(python3 << 'PYEOF'
+import hashlib, os
+lock_path = 'mcps-lock.json'
+if os.path.exists(lock_path):
+    data = open(lock_path, 'rb').read()
+else:
+    data = b'{}'
+h = hashlib.sha256(data).hexdigest()
+import subprocess
+uname = subprocess.run(['uname', '-a'], capture_output=True, text=True).stdout.encode()
+runner_h = hashlib.sha256(uname).hexdigest()[:12]
+print(f'mcp-snapshot-v1-{h}-{runner_h}')
+PYEOF
+          )
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Snapshot key: $KEY"
 
@@ -80,32 +88,33 @@ jobs:
       - name: Build DB snapshot
         run: |
           mkdir -p registry/data
-          .venv/bin/python3 -c "
-            import sys; sys.path.insert(0, 'registry/src')
-            from db import get_conn
-            from crud import scan_and_register_all
-            conn = get_conn()
-            scan_and_register_all(conn)
-            print('DB snapshot ready')
-          "
+          .venv/bin/python3 << 'PYEOF'
+import sys
+sys.path.insert(0, 'registry/src')
+from db import get_conn
+from crud import scan_and_register_all
+conn = get_conn()
+scan_and_register_all(conn)
+print('DB snapshot ready')
+PYEOF
 
       - name: List MCPs
         id: list-mcps
         run: |
-          .venv/bin/python3 -c "
-            import sys, json
-            sys.path.insert(0, 'registry/src')
-            from catalog import list_mcp_ids, read_manifest
-            ids = list_mcp_ids()
-            # Output must be JSON array for fromJSON
-            print(f'ids={json.dumps(ids)}')
-            hashes = {}
-            for mid in ids:
-                man = read_manifest(mid)
-                if man:
-                    hashes[mid] = man.get('version','0.0.0')
-            print(f'hashes={json.dumps(hashes)}')
-          " >> "$GITHUB_OUTPUT"
+          .venv/bin/python3 >> "$GITHUB_OUTPUT" << 'PYEOF'
+import sys, json
+sys.path.insert(0, 'registry/src')
+from catalog import list_mcp_ids, read_manifest
+ids = list_mcp_ids()
+# Output must be JSON array for fromJSON
+print(f'ids={json.dumps(ids)}')
+hashes = {}
+for mid in ids:
+    man = read_manifest(mid)
+    if man:
+        hashes[mid] = man.get('version','0.0.0')
+print(f'hashes={json.dumps(hashes)}')
+PYEOF
 
       - name: Save snapshot after cache miss
         if: steps.cache.outputs.cache-hit != 'true'
@@ -145,68 +154,68 @@ jobs:
       - name: Execute MCP function
         id: execute
         run: |
-          .venv/bin/python3 -c "
-            import sys; sys.path.insert(0, 'registry/src')
-            from catalog import read_manifest
-            import json
+          .venv/bin/python3 << 'PYEOF'
+import sys, json
+sys.path.insert(0, 'registry/src')
+from catalog import read_manifest
 
-            mcp_id = '${{ matrix.mcp_id }}'
-            man = read_manifest(mcp_id)
-            if not man:
-                print(f'Manifesto {mcp_id} não encontrado')
-                sys.exit(1)
+mcp_id = '${{ matrix.mcp_id }}'
+man = read_manifest(mcp_id)
+if not man:
+    print(f'Manifesto {mcp_id} não encontrado')
+    sys.exit(1)
 
-            # Adiciona o src/ do MCP ao path (para imports como 'from core import ...')
-            mcp_src = f'mcps/{mcp_id}/src'
-            if mcp_src not in sys.path:
-                sys.path.insert(0, mcp_src)
+# Adiciona o src/ do MCP ao path (para imports como 'from core import ...')
+mcp_src = f'mcps/{mcp_id}/src'
+if mcp_src not in sys.path:
+    sys.path.insert(0, mcp_src)
 
-            # Executa cada função do MCP
-            results = {}
-            for fn in man.get('functions', []):
-                fn_name = fn['name']
-                print(f'  Rodando {mcp_id}.{fn_name}...')
+# Executa cada função do MCP
+results = {}
+for fn in man.get('functions', []):
+    fn_name = fn['name']
+    print(f'  Rodando {mcp_id}.{fn_name}...')
 
-                try:
-                    import importlib.util
-                    server_path = f'mcps/{mcp_id}/src/server.py'
-                    spec = importlib.util.spec_from_file_location(f'mcp_{mcp_id}', server_path)
-                    if spec and spec.loader:
-                        mod = importlib.util.module_from_spec(spec)
-                        sys.modules[spec.name] = mod
-                        spec.loader.exec_module(mod)
-                        func = getattr(mod, fn_name, None)
-                        if func:
-                            # Cria input mínimo baseado no schema
-                            inp = {}
-                            inp_schema = fn.get('input_schema', {})
-                            for req in inp_schema.get('required', []):
-                                if req in inp_schema.get('properties', {}):
-                                    prop = inp_schema['properties'][req]
-                                    if 'default' in prop:
-                                        inp[req] = prop['default']
-                                    elif prop.get('type') == 'string':
-                                        inp[req] = 'auto'
-                                    elif prop.get('type') == 'number':
-                                        inp[req] = 0
-                                    elif prop.get('type') == 'integer':
-                                        inp[req] = 0
-                                    elif prop.get('type') == 'boolean':
-                                        inp[req] = False
-                            result = func(**inp)
-                            results[fn_name] = {'status': 'ok', 'result': result}
-                        else:
-                            results[fn_name] = {'status': 'error', 'error': 'Função não encontrada no módulo'}
-                    else:
-                        results[fn_name] = {'status': 'error', 'error': 'Falha ao carregar servidor'}
-                except Exception as exc:
-                    results[fn_name] = {'status': 'error', 'error': str(exc)}
+    try:
+        import importlib.util
+        server_path = f'mcps/{mcp_id}/src/server.py'
+        spec = importlib.util.spec_from_file_location(f'mcp_{mcp_id}', server_path)
+        if spec and spec.loader:
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = mod
+            spec.loader.exec_module(mod)
+            func = getattr(mod, fn_name, None)
+            if func:
+                # Cria input mínimo baseado no schema
+                inp = {}
+                inp_schema = fn.get('input_schema', {})
+                for req in inp_schema.get('required', []):
+                    if req in inp_schema.get('properties', {}):
+                        prop = inp_schema['properties'][req]
+                        if 'default' in prop:
+                            inp[req] = prop['default']
+                        elif prop.get('type') == 'string':
+                            inp[req] = 'auto'
+                        elif prop.get('type') == 'number':
+                            inp[req] = 0
+                        elif prop.get('type') == 'integer':
+                            inp[req] = 0
+                        elif prop.get('type') == 'boolean':
+                            inp[req] = False
+                result = func(**inp)
+                results[fn_name] = {'status': 'ok', 'result': result}
+            else:
+                results[fn_name] = {'status': 'error', 'error': 'Função não encontrada no módulo'}
+        else:
+            results[fn_name] = {'status': 'error', 'error': 'Falha ao carregar servidor'}
+    except Exception as exc:
+        results[fn_name] = {'status': 'error', 'error': str(exc)}
 
-            print(f'Resultados:')
-            print(json.dumps(results, indent=2))
-            with open(f'{mcp_id}_output.json', 'w') as f:
-                json.dump(results, f, indent=2)
-          "
+print(f'Resultados:')
+print(json.dumps(results, indent=2))
+with open(f'{mcp_id}_output.json', 'w') as f:
+    json.dump(results, f, indent=2)
+PYEOF
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -229,28 +238,27 @@ jobs:
 
       - name: Consolidate
         run: |
-          python3 -c "
-            import json, glob, os
-            all_results = {}
-            # Procura arquivos _output.json dentro de diretórios output-*
-            for dirpath, dirnames, filenames in os.walk('.'):
-                for fn in filenames:
-                    if fn.endswith('_output.json'):
-                        fpath = os.path.join(dirpath, fn)
-                        # Extrai mcp_id do nome do arquivo: example-greeter_output.json
-                        mcp_id = fn.replace('_output.json','')
-                        try:
-                            data = json.load(open(fpath))
-                            all_results[mcp_id] = data
-                        except Exception as exc:
-                            all_results[mcp_id] = {'error': str(exc)}
-            with open('_results.json', 'w') as out:
-                json.dump(all_results, out, indent=2)
-            print(f'Consolidado: {len(all_results)} MCP(s)')
-            for mid, res in all_results.items():
-                statuses = [v.get(\"status\",'?' ) for k,v in (res.items() if isinstance(res, dict) else {}.items())]
-                print(f'  {mid}: {statuses}' if isinstance(res, dict) else f'  {mid}: {res}')
-          "
+          python3 << 'PYEOF'
+import json, os
+
+all_results = {}
+for dirpath, dirnames, filenames in os.walk('.'):
+    for fn in filenames:
+        if fn.endswith('_output.json'):
+            fpath = os.path.join(dirpath, fn)
+            mcp_id = fn.replace('_output.json','')
+            try:
+                all_results[mcp_id] = json.load(open(fpath))
+            except Exception as exc:
+                all_results[mcp_id] = {'error': str(exc)}
+
+with open('_results.json', 'w') as out:
+    json.dump(all_results, out, indent=2)
+
+print(f'Consolidado: {len(all_results)} MCP(s)')
+for mid, res in all_results.items():
+    print(f'  {mid}: {"OK" if isinstance(res,dict) and all(v.get("status")=="ok" for v in res.values()) else "FAIL"}')
+PYEOF
 
       - name: Upload consolidated
         uses: actions/upload-artifact@v4
