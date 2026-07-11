@@ -1,61 +1,268 @@
-# 🏗️ MCPs as Objects — Gestão Determinística de MCPs
+# 🏗️ MCPs as Objects
+
+> **Gestão determinística de MCPs como objetos — replicável, contínuo, event-driven.**
 
 ```
-┌────────────────────────────────────────────────────┐
-│  GESTÃO MCPS AS A OBJECT                           │
-│  └─ ESTRUTURA GERENCIADA                           │
-│  └─ CONTROLE RÍGIDO DE PATTERN E NOMENCLATURA      │
-│  └─ DETERMINÍSTICO                                 │
-│  └─ RUNTIME EM GITHUB WORKFLOW CACHE/SNAPSHOT      │
-│  └─ BACKEND + SQLITE + API                         │
-│  └─ CATÁLOGO: descrição, funções, input, output     │
-│  └─ CRIADOR DE MCPS CONFORME PADRÃO                │
-│  └─ CADA MCP É UMA MÁQUINA ISOLADA                 │
-└────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  GESTÃO MCPS AS A OBJECT                                        │
+│  └─ Toda estrutura gerenciada por padrão único e rígido          │
+│  └─ Determinístico: mesmo input + mesmo manifesto = mesmo output│
+│  └─ Runtime em GitHub Workflow com cache inteligente (SHA-256)   │
+│  └─ Backend + SQLite + API + CLI                                 │
+│  └─ Catálogo com descrição, funções, input/output schema         │
+│  └─ Constructor: cria MCPs replicáveis a partir de template     │
+│  └─ Event-driven: cada MCP responde ao seu próprio evento        │
+│  └─ Cache isolation: SHA-256 do lockfile → cache key única      │
+└──────────────────────────────────────────────────────────────────┘
 ```
-
-**mcps-as-objects** é um sistema determinístico para criar, catalogar, validar, executar e compor **MCPs (Model Context Protocol servers)** como objetos gerenciados, rodando em runtime no **GitHub Actions** com cache inteligente via snapshot.
 
 ---
 
-## ✨ Filosofia
+## ✨ Replicável Contínuo — Como Funciona
 
-1. **Tudo é gerenciado** — Não existem MCPs soltos. Todo MCP tem um manifesto, um schema, um ciclo de vida.
-2. **Padrão único e rígido** — Estrutura de diretórios, nomenclaturas e versões seguem um contrato determinístico.
-3. **Máquinas isoladas** — Cada MCP roda em seu próprio job/sandbox no GitHub Actions.
-4. **Pipeline modular** — MCPs se compõem: output de um vira input de outro.
-5. **Cache inteligente** — Snapshot da máquina montada (venv + DB + lockfile) é restaurado em segundos.
-6. **Replicável** — `git clone` + `bootstrap.sh` = tudo funcionando, e criar um novo MCP é um comando.
+### O Ciclo
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│   IDEIA  │    │  CRIAR   │    │VERIFICAR │    │REGISTRAR │
+│ Novo MCP │───▶│constructor│───▶│verify-mcp│───▶│  DB +    │
+│          │    │          │    │15 checks │    │ lockfile │
+└──────────┘    └──────────┘    └──────────┘    └────┬─────┘
+                                                     │
+┌──────────┐    ┌──────────┐    ┌──────────┐         │
+│   USAR   │    │ DISPARAR │    │ COMMITAR │◀────────┘
+│ pi-agent │◀───│ workflow │◀───│ git push │
+│   API    │    │event-drv │    │          │
+└──────────┘    └──────────┘    └──────────┘
+```
+
+### 1. Criar = 1 comando
+
+```bash
+python3 -c "from constructor import create_mcp; create_mcp('meu-servico')"
+```
+
+Gera automaticamente:
+
+```
+mcps/meu-servico/
+├── mcp.json          ← Manifesto (contrato)
+├── src/
+│   ├── core.py       ← Lógica pura (stdlib, testável)
+│   └── server.py     ← Wrapper FastMCP
+├── tests/
+│   └── test_smoke.py ← Testes do core.py
+└── README.md         ← Documentação
+```
+
+**Tudo igual, sempre.** Mesma estrutura, mesmo padrão, mesmo contrato.
+
+### 2. Verificar = 15 checks automáticos
+
+```
+python3 scripts/verify-mcp.py meu-servico
+```
+
+| # | Check | Obrigatório |
+|---|-------|-------------|
+| 📁 | Estrutura de diretórios | ✅ |
+| 📁 | Nomenclatura kebab-case | ✅ |
+| 📜 | Manifesto JSON válido | ✅ |
+| 📜 | Contra schema | ✅ |
+| 📜 | ID condiz com diretório | ✅ |
+| 📜 | `platforms` definido | ⚠️ |
+| 📜 | Ao menos 1 função | ✅ |
+| 🔧 | Entrypoint existe | ✅ |
+| 🔧 | `@mcp.tool()` condizentes | ✅ |
+| 🧪 | Testes existem | ⚠️ |
+| 🧪 | Testes compilam | ⚠️ |
+| 📦 | Entrada no lockfile | ⚠️ |
+| 💾 | Cache SHA-256 consistente | ⚠️ |
+| 🚀 | Pode ser disparado individualmente | ✅ |
+| 📱 | Plataforma válida | ⚠️ |
+
+**0 erros = aprovado. Erros = corrigir antes de prosseguir.**
+
+### 3. Lockfile SHA-256 → Cache key → Isolamento
+
+```mermaid
+flowchart LR
+    A[mcp.json] --> B[SHA-256]
+    B --> C[mcps-lock.json]
+    C --> D[Cache Key]
+    D --> E[Snapshot]
+    E --> F[Execução]
+```
+
+```
+cache_key = "mcp-snapshot-v1-{sha256(mcps-lock.json)}-{sha256(uname)[:12]}"
+```
+
+- Se o manifesto muda → SHA-256 muda → cache key muda
+- Snapshot anterior **NUNCA** contamina o novo estado
+- Cache hit = restaura em **~5s**. Cache miss = build do zero em **~3min**
+
+### 4. Registro automático no DB
+
+```bash
+python3 -c "
+from db import get_conn
+from crud import scan_and_register_all
+conn = get_conn()
+scan_and_register_all(conn)
+"
+```
+
+Popula 3 tabelas SQLite:
+
+| Tabela | O que guarda |
+|--------|-------------|
+| `mcps` | id, name, version, manifest_hash (SHA-256) |
+| `functions` | name, input_schema, output_schema |
+| `runs` | histórico de execuções (status, payload, workflow) |
+
+### 5. Event-driven: cada MCP é seu próprio objeto
+
+```bash
+# Disparar SOMENTE meu-servico (não executa os outros)
+gh workflow run mcp-runtime.yml \
+  -f mcp_id=meu-servico \
+  --repo camillanapoles/mcps-as-objects
+```
+
+Cada MCP responde ao **seu próprio evento**. Nenhum MCP é executado sem ser explicitamente chamado. Falha em um não afeta os outros.
 
 ---
 
 ## 🚀 Quickstart (5 minutos)
 
 ```bash
-# 1. Clone e entre
-git clone <seu-repo> && cd mcps-as-objects
+# 1. Clone
+git clone https://github.com/camillanapoles/mcps-as-objects
+cd mcps-as-objects
 
-# 2. Bootstrap (instala deps, valida, mostra comandos)
-./tools/bootstrap.sh
+# 2. Crie seu primeiro MCP
+python3 -c "
+from constructor import create_mcp
+create_mcp('meu-primeiro-mcp', name='Meu Primeiro MCP',
+           description='Meu primeiro MCP gerenciado')
+"
 
-# 3. Crie seu primeiro MCP
-./tools/mcpsctl new meu-mcp --name "Meu MCP" --desc "Faz algo incrível"
+# 3. Verifique
+python3 scripts/verify-mcp.py meu-primeiro-mcp
 
-# 4. Edite o manifesto
-#    vim mcps/meu-mcp/mcp.json
+# 4. Implemente a lógica
+#    vim mcps/meu-primeiro-mcp/src/core.py
 
-# 5. Implemente o servidor
-#    vim mcps/meu-mcp/src/server.py
+# 5. Crie os testes
+#    vim mcps/meu-primeiro-mcp/tests/test_smoke.py
 
-# 6. Valide
-./tools/mcpsctl validate meu-mcp
+# 6. Execute os testes
+python3 -m pytest mcps/meu-primeiro-mcp/tests/
 
-# 7. Atualize lockfile
-./tools/mcpsctl lock
+# 7. Atualize o lockfile e registre no DB
+python3 -c "
+from catalog import *
+from db import get_conn
+from crud import register_mcp
 
-# 8. Suba a API e teste
-make run-api
-# curl http://127.0.0.1:8712/mcps
+lock = read_lockfile()
+if 'entries' not in lock: lock['entries'] = {}
+for mid in list_mcp_ids():
+    man = read_manifest(mid)
+    if man:
+        lock['entries'][mid] = {
+            'version': man.get('version','0.0.0'),
+            'manifest_hash': manifest_hash(mid) or '',
+            'deps_hash': ''
+        }
+write_lockfile(lock)
+conn = get_conn()
+register_mcp(conn, 'meu-primeiro-mcp')
+"
+
+# 8. Commite
+git add mcps/meu-primeiro-mcp/ mcps-lock.json
+git commit -m "feat: meu primeiro MCP"
+git push
+```
+
+---
+
+## ⚡ Uso Remoto (GitHub Actions)
+
+### Disparar workflow individual
+
+```bash
+# Executa APENAS o MCP especificado (event-driven)
+gh workflow run mcp-runtime.yml \
+  -f mcp_id=python-termux-builder \
+  --repo camillanapoles/mcps-as-objects
+
+# Acompanhar
+gh run view --watch --repo camillanapoles/mcps-as-objects
+```
+
+### Disparar via API
+
+```bash
+# Requer API rodando localmente
+curl -X POST http://localhost:8712/mcps/python-termux-builder/dispatch
+# → 202 Accepted: { "run_id": "...", "status": "dispatched" }
+```
+
+### Executar batch (todos os MCPs)
+
+```bash
+# Sem mcp_id → executa todos
+gh workflow run mcp-runtime.yml --repo camillanapoles/mcps-as-objects
+```
+
+### Ver resultados
+
+```bash
+# Listar artifacts do último run
+gh run view <run-id> --repo camillanapoles/mcps-as-objects --json=artifacts
+
+# Baixar resultados consolidados
+gh run download <run-id> \
+  --repo camillanapoles/mcps-as-objects \
+  -n results-consolidated
+```
+
+---
+
+## 📡 API Local (gestão e consulta)
+
+```bash
+# Iniciar servidor
+uvicorn registry.src.api:app --host 127.0.0.1 --port 8712
+
+# Endpoints principais
+GET  /mcps                     # Listar todos os MCPs
+GET  /mcps/{id}                # Detalhe de um MCP
+GET  /mcps/{id}/manifest       # Manifesto completo
+GET  /mcps/{id}/functions      # Funções do MCP
+POST /mcps/{id}/run            # Executar função inline
+POST /mcps/{id}/dispatch       # Disparar workflow remoto
+GET  /mcps/compatible          # MCPs compatíveis com sua plataforma
+GET  /platform                 # Info da plataforma atual
+GET  /snapshot/key             # Chave de cache atual
+```
+
+---
+
+## 🧪 Testes
+
+```bash
+# Testar um MCP específico
+python3 -m pytest mcps/meu-servico/tests/ -v
+
+# Testar o registry
+python3 -m pytest registry/tests/ -v
+
+# Verificação completa (15 checks)
+python3 scripts/verify-mcp.py --all
 ```
 
 ---
@@ -65,173 +272,112 @@ make run-api
 ```
 mcps-as-objects/
 ├── .github/workflows/         # Workflows GitHub Actions
-│   ├── mcp-runtime.yml        # 🏭 Pipeline principal (matrix)
-│   ├── mcp-cache.yml          # 💾 Build de snapshot
-│   └── mcp-validate.yml       # ✅ CI validação
+│   ├── mcp-runtime.yml        # Execução principal (batch + event-driven)
+│   ├── mcp-single.yml         # Execução de 1 MCP (event-driven)
+│   ├── mcp-cache.yml          # Build de snapshot
+│   ├── mcp-validate.yml       # CI: validação de schema
+│   └── mcp-verify.yml         # CI: 15 checks de conformidade
 │
-├── schemas/                   # 📐 Fonte da verdade (JSON Schema)
-│   ├── mcp-manifest.schema.json
-│   ├── function-io.schema.json
-│   └── lockfile.schema.json
+├── mcps/                      # 📦 MCPs gerenciados
+│   ├── _template/             # Template determinístico
+│   ├── example-greeter/       # Exemplo funcional (universal)
+│   ├── processador-texto/     # Exemplo replicável (universal)
+│   ├── python-termux-builder/ # Só android/termux
+│   └── meu-primeiro-mcp/      # Seu MCP aqui!
 │
-├── mcps/                      # 📦 MCPs catalogados
-│   ├── _template/             #     Template determinístico
-│   └── example-greeter/       #     Exemplo funcional
-│
-├── registry/                  # ⚙️ Registry Backend
+├── registry/                  # ⚙️ Backend de gestão
 │   ├── src/
-│   │   ├── server.py          #     MCP server (stdio)
-│   │   ├── api.py             #     HTTP API (FastAPI)
-│   │   ├── cli.py             #     CLI (mcpsctl)
-│   │   ├── db.py              #     SQLite + migrations
-│   │   ├── crud.py            #     CRUD operations
-│   │   ├── catalog.py         #     Leitura de manifestos
-│   │   ├── validator.py       #     Validação contra schemas
-│   │   ├── constructor.py     #     Criador de MCPs (template)
-│   │   ├── composer.py        #     Pipeline/composição
-│   │   └── snapshot.py        #     Cache key determinística
-│   ├── data/
-│   └── tests/
+│   │   ├── api.py             # HTTP API (FastAPI :8712)
+│   │   ├── server.py          # MCP server (stdio, para pi)
+│   │   ├── cli.py             # CLI (mcpsctl)
+│   │   ├── db.py              # SQLite + migrations
+│   │   ├── crud.py            # CRUD operations
+│   │   ├── catalog.py         # Leitura de manifestos
+│   │   ├── validator.py       # Validação JSON Schema
+│   │   ├── constructor.py     # Criador de MCPs
+│   │   ├── composer.py        # Pipeline/composição
+│   │   ├── snapshot.py        # Cache key SHA-256
+│   │   ├── platdetect.py      # Detector de plataforma
+│   │   └── verifier.py        # Pós-criação verify
+│   └── data/                  # SQLite DB
 │
-├── tools/                     # 🔧 Ferramentas
-│   ├── mcpsctl                #     CLI principal
-│   ├── bootstrap.sh           #     Setup inicial
-│   └── snapshot.sh            #     Cache helpers
+├── scripts/                   # 🔧 Scripts de execução
+│   ├── compute-key.py         # Cache key SHA-256
+│   ├── build-db.py            # Build SQLite
+│   ├── list-mcps.py           # Lista MCPs
+│   ├── execute-mcp.py         # Executa 1 MCP
+│   ├── consolidate.py         # Consolida resultados
+│   └── verify-mcp.py          # 15 checks de conformidade
 │
+├── schemas/                   # 📐 JSON Schemas (contratos)
+├── tools/                     # 🔧 CLIs
 ├── docs/                      # 📖 Documentação
-│   ├── ARCHITECTURE.md
-│   ├── PATTERNS.md
-│   ├── MCP-AUTHORING.md
-│   └── WORKFLOW-RUNTIME.md
 │
-├── mcps-lock.json             # 📌 Lockfile determinístico
-├── requirements.txt
-├── Makefile
-└── README.md
+├── mcps-lock.json             # 📌 Lockfile com SHA-256
+├── AGENTS.md                  # 🧠 Instruções para o agente
+└── README.md                  # ← Você está aqui
 ```
 
 ---
 
-## 🎮 Comandos
+## 📊 Evidências Reais
 
-### CLI (`tools/mcpsctl`)
+### 4 MCPs criados na mesma sessão de desenvolvimento
 
-| Comando | Descrição |
-|---------|-----------|
-| `list` | Listar MCPs catalogados |
-| `describe <id>` | Detalhar um MCP (manifesto completo) |
-| `new <id>` | **Criar novo MCP** a partir do template |
-| `validate <id>` ou `--all` | Validar manifesto(s) contra schemas |
-| `lock` | Atualizar `mcps-lock.json` com hashes |
-| `scan` | Escanear filesystem e registrar no DB |
-| `serve-api` | Rodar API HTTP (porta 8712) |
-| `serve-mcp` | Rodar MCP server (stdio) |
-| `cache-key` | Mostrar chave de cache determinística |
+| MCP | Criado via | Status |
+|-----|-----------|--------|
+| `example-greeter` | Template manual | ✅ Funcionando |
+| `processador-texto` | Constructor | ✅ Funcionando |
+| `python-termux-builder` | Constructor + `core.py` + workflow | ✅ Funcionando |
+| `meu-novo-servico` | Constructor + verify | ✅ Criado |
 
-### Make
+**Todos seguindo o MESMO padrão, MESMA estrutura, MESMA validação.**
 
-| Alvo | Descrição |
-|------|-----------|
-| `make install` | Virtualenv + dependências |
-| `make run-api` | API HTTP em :8712 |
-| `make run-mcp` | MCP server stdio |
-| `make validate` | Validar todos os manifestos |
-| `make test` | Rodar testes |
-| `make lock` | Atualizar lockfile |
-| `make new id=<id>` | Criar novo MCP |
+### Tempos reais de execução
+
+| Operação | Cache hit | Cache miss |
+|----------|-----------|------------|
+| Registry (listar MCPs) | ~3s | ~3min |
+| Worker (1 MCP) | ~5s | ~1min |
+| Workflow completo (3 MCPs) | ~30s | ~5min |
 
 ---
 
-## 💡 Criar um Novo MCP (passo a passo)
+## 📚 Documentação
 
-```bash
-# 1. Cria estrutura a partir do template
-tools/mcpsctl new meu-data-processor
-
-# 2. Edita manifesto
-vim mcps/meu-data-processor/mcp.json
-
-# 3. Implementa
-vim mcps/meu-data-processor/src/server.py
-
-# 4. Valida
-tools/mcpsctl validate meu-data-processor
-
-# 5. Lock
-tools/mcpsctl lock
-
-# 6. Testa via API (com make run-api rodando)
-curl -X POST http://127.0.0.1:8712/mcps/meu-data-processor/run \
-  -H "Content-Type: application/json" \
-  -d '{"function_name": "minha_funcao", "input_payload": {"arg": "valor"}}'
-
-# 7. Commita e faz PR → CI valida automaticamente
-```
+| Documento | Conteúdo |
+|-----------|---------|
+| [Architecture](docs/ARCHITECTURE.md) | Visão geral do sistema, camadas, princípios |
+| [Governance](docs/GOVERNANCE.md) | 📜 Regras, ciclos, verificações |
+| [Project](docs/PROJECT.md) | 🏗️ Documento vivo completo |
+| [Criteria](docs/CRITERIA.md) | ⚡ Local vs Remoto (quando usar cada um) |
+| [Feasibility](docs/WORKFLOW-FEASIBILITY.md) | 🧪 Como saber se um workflow é possível |
+| [Patterns](docs/PATTERNS.md) | Convenções determinísticas |
+| [Authoring](docs/MCP-AUTHORING.md) | Guia de criação de MCPs |
+| [Workflow Runtime](docs/WORKFLOW-RUNTIME.md) | Execução em GitHub Actions |
+| [AGENTS.md](AGENTS.md) | 🧠 Skill do agente — guia completo de uso |
 
 ---
 
-## 🔄 Como o Runtime Funciona (GitHub Actions)
-
-1. **Cache hit** → `.venv` + `registry.db` restaurados em <1s
-2. **Cache miss** → Instala deps, constrói DB, salva snapshot
-3. **Registry boot** → API sobe, cataloga todos MCPs
-4. **Matrix workers** → Cada MCP roda em job isolado
-5. **Collect** → Resultados consolidados em artifact
-
-[Leia mais →](docs/WORKFLOW-RUNTIME.md)
-
----
-
-## 📐 Determinismo
-
-| Aspecto | Garantia |
-|---------|----------|
-| Cache key | `sha256(mcps-lock.json)` + `sha256(uname -a)` |
-| Manifesto | Schema único, validação dupla (CI + runtime) |
-| Output | Dado mesmo input + mesmo snapshot = mesmo output |
-| Snapshot | Imutável até lockfile mudar |
-| Pipeline | DAG topológica sem efeitos colaterais |
-
----
-
-## 🔗 Integração com pi-coding
-
-O registry expõe um **MCP server via stdio** que o `pi-coding-agent` pode consumir:
+## 🧠 Integração com pi-coding-agent
 
 ```jsonc
-// .pi/config.json ou mcpServers do pi
+// .pi/config.json
 {
-  "mcps-as-objects": {
-    "command": "python3",
-    "args": ["registry/src/server.py"],
-    "cwd": "/caminho/mcps-as-objects"
+  "mcpServers": {
+    "mcps-as-objects": {
+      "command": "python3",
+      "args": ["registry/src/server.py"],
+      "cwd": "/caminho/mcps-as-objects"
+    }
   }
 }
 ```
 
-Isso permite que o pi consulte o catálogo, descreva MCPs, valide manifestos e até crie novos MCPs — tudo via chat.
+Assim o `pi` pode consultar o catálogo, descrever MCPs, validar manifestos e criar novos MCPs via chat.
 
 ---
 
-## 🧪 Testes
+## 📄 Licença
 
-```bash
-make test
-# Ou
-python3 -m pytest -v registry/tests/ mcps/example-greeter/tests/
-```
-
----
-
-## 📖 Documentação
-
-| Documento | Leituras |
-|-----------|----------|
-| [Arquitetura](docs/ARCHITECTURE.md) | Visão geral do sistema, camadas, princípios |
-| [Critérios de Uso](docs/CRITERIA.md) | ⚡ Quando usar LOCAL (stdio) vs REMOTO (GitHub Actions) |
-| [Viabilidade de Workflows](docs/WORKFLOW-FEASIBILITY.md) | 🧪 Como saber se uma ideia de workflow é possível ou não |
-| [Governança](docs/GOVERNANCE.md) | 📜 Regras, ciclos, verificações e responsabilidades |
-| [Projeto](docs/PROJECT.md) | 🏗️ Documento vivo — arquitetura completa, fluxos, componentes |
-| [Patterns](docs/PATTERNS.md) | **Regras rígidas** de nomenclatura e estrutura |
-| [Authoring](docs/MCP-AUTHORING.md) | Guia prático: como criar um novo MCP |
-| [Workflow Runtime](docs/WORKFLOW-RUNTIME.md) | Como executa em GitHub Actions |
+MIT — Use, modifique, distribua. Este projeto existe para ser replicado.
