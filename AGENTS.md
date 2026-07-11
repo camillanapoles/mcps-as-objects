@@ -8,6 +8,27 @@
 ## PARTE 1 — COMO USAR O PROJETO
 ## ═══════════════════════════════════════════════════════════════
 
+### 1.0 Sem Clone — Tudo via API
+
+O projeto pode ser usado **sem clonar o repositório**. GitHub API permite criar MCPs, disparar workflows e ver resultados remotamente.
+
+| Operação | API | Exemplo |
+|----------|-----|---------|
+| Criar mcp.json | `PUT /repos/{owner}/{repo}/contents/mcps/{id}/mcp.json` | curl com base64 |
+| Criar server.py | `PUT /repos/{owner}/{repo}/contents/mcps/{id}/src/server.py` | curl com base64 |
+| Disparar workflow | `POST /repos/{owner}/{repo}/actions/workflows/{id}/dispatches` | curl com inputs |
+| Ver resultado | `GET /repos/{owner}/{repo}/actions/runs/{id}` | gh ou curl |
+| Baixar artifact | `GET /repos/{owner}/{repo}/actions/artifacts/{id}/zip` | gh ou curl |
+| Listar MCPs | `GET /repos/{owner}/{repo}/contents/mcps` | curl |
+
+**Fluxo 100% remoto:**
+1. `PUT /contents` → cria `mcp.json` + `src/server.py` no repo
+2. `POST /dispatches` → dispara `mcp-runtime.yml` com `mcp_id=<id>`
+3. O workflow valida, registra no DB e executa o MCP
+4. `GET /actions/runs` + `GET /artifacts` → obtém resultados
+
+> **Clone é necessário apenas para desenvolvimento local** (testes, verify-mcp, API local, server para pi).
+
 ### 1.1 Visão Geral
 
 ```

@@ -134,6 +134,75 @@ Cada MCP responde ao **seu próprio evento**. Nenhum MCP é executado sem ser ex
 
 ---
 
+## 🌐 Sem Clone — Usar Tudo via API
+
+Você **não precisa clonar** o repositório para usar o sistema. O GitHub API permite criar MCPs, disparar workflows e obter resultados sem baixar nada.
+
+### O que dá pra fazer via API (sem clone)
+
+| Operação | API | Exemplo |
+|----------|-----|---------|
+| **Criar mcp.json** | `PUT /repos/{owner}/{repo}/contents/mcps/{id}/mcp.json` | Cria o manifesto |
+| **Criar server.py** | `PUT /repos/{owner}/{repo}/contents/mcps/{id}/src/server.py` | Cria o servidor |
+| **Disparar workflow** | `POST /repos/{owner}/{repo}/actions/workflows/{id}/dispatches` | Executa o MCP |
+| **Ver resultado** | `GET /repos/{owner}/{repo}/actions/runs/{id}` | Acompanha execução |
+| **Baixar artifact** | `GET /repos/{owner}/{repo}/actions/artifacts/{id}/zip` | Obtém output |
+| **Listar MCPs** | `GET /repos/{owner}/{repo}/contents/mcps` | Catálogo remoto |
+
+### Exemplo: criar e executar um MCP sem clone
+
+```bash
+# 1. Criar mcp.json via API
+curl -X PUT \
+  -H "Authorization: Bearer $GH_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://api.github.com/repos/camillanapoles/mcps-as-objects/contents/mcps/meu-mcp-api/mcp.json" \
+  -d '{
+    "message": "feat: novo MCP via API",
+    "content": "'$(echo '{
+  "id": "meu-mcp-api",
+  "name": "Meu MCP API",
+  "version": "0.1.0",
+  "description": "Criado sem clone",
+  "entry": "src/server.py",
+  "runtime": { "language": "python", "image": "ubuntu-22.04" },
+  "functions": [{
+    "name": "ping",
+    "description": "Responde pong",
+    "input_schema": { "type": "object", "properties": {}, "required": [] },
+    "output_schema": { "type": "object", "properties": { "result": { "type": "string" } } }
+  }],
+  "platforms": ["*"]
+}' | base64 -w0)'"
+  }'
+
+# 2. Disparar workflow para este MCP (event-driven)
+curl -X POST \
+  -H "Authorization: Bearer $GH_TOKEN" \
+  -H "Content-Type: application/json" \
+  "https://api.github.com/repos/camillanapoles/mcps-as-objects/actions/workflows/mcp-runtime.yml/dispatches" \
+  -d '{"ref": "main", "inputs": {"mcp_id": "meu-mcp-api"}}'
+
+# 3. Acompanhar
+gh run view --repo camillanapoles/mcps-as-objects --watch
+```
+
+> **Nota:** O workflow escaneia o filesystem e registra o MCP no SQLite automaticamente. Você não precisa rodar `register_mcp()` localmente.
+
+### Quando precisa de clone
+
+| Operação | Precisa de clone? | Motivo |
+|----------|------------------|--------|
+| Usar MCPs existentes (disparar + ver resultado) | ❌ **Não** | Só API |
+| Criar MCPs novos | ⚠️ **API** cria arquivos, workflow valida | Pode ser 100% remoto |
+| Rodar testes (`pytest`) | ✅ **Sim** | Código precisa executar local |
+| Rodar `verify-mcp.py` | ✅ **Sim** | Script local |
+| Rodar API local (`uvicorn`) | ✅ **Sim** | Servidor HTTP local |
+| Rodar MCP server para pi | ✅ **Sim** | Processo vivo (stdio) |
+| Desenvolver/debug | ✅ **Sim** | Feedback rápido |
+
+---
+
 ## 🚀 Quickstart (5 minutos)
 
 ```bash
