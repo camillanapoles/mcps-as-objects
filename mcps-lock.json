@@ -15,6 +15,11 @@
       "version": "0.1.0",
       "manifest_hash": "0507ebeab9845bc1f201a237f4abb9d5994d3f8e088eee5e5eb1a6543f0680c1",
       "deps_hash": ""
+    },
+    "meu-novo-servico": {
+      "version": "0.1.0",
+      "manifest_hash": "9e672d8143eb499912423135feff616e91265100fbc449b7ad6d6f13de091aa4",
+      "deps_hash": ""
     }
   }
 }

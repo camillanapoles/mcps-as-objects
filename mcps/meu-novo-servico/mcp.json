@@ -1,0 +1,59 @@
+{
+  "id": "meu-novo-servico",
+  "name": "Meu Novo Serviço",
+  "version": "0.1.0",
+  "description": "Serviço de teste do pipeline pre-staging",
+  "entry": "src/server.py",
+  "runtime": {
+    "language": "python",
+    "image": "ubuntu-22.04",
+    "estimated_duration_sec": 60,
+    "dependencies": {
+      "python": "requirements.txt"
+    }
+  },
+  "functions": [
+    {
+      "name": "exemplo",
+      "description": "Função exemplo que demonstra o padrão.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Mensagem de entrada."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "echo": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "echo",
+          "timestamp"
+        ]
+      }
+    }
+  ],
+  "permissions": [],
+  "pipeline": {
+    "consumes": [],
+    "produces": []
+  },
+  "tags": [
+    "template"
+  ],
+  "platforms": [
+    "*"
+  ]
+}
