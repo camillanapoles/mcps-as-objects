@@ -1,0 +1,38 @@
+# ═══════════════════════════════════════════════════════════════════
+# project-automation.yml — Automação do Kanban MCP-MANAGER
+#
+# Event-driven: move cards no GitHub Project baseado em eventos.
+# ═══════════════════════════════════════════════════════════════════
+
+name: Project Automation
+on:
+  issues:
+    types: [opened, labeled, closed]
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  move-cards:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Issue opened → Backlog
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        run: |
+          echo "Issue #${{ github.event.issue.number }} aberta → mover para Backlog"
+          # Nota: GitHub Projects V2 API requer token com escopo project
+          # Implementar via gh project item-add quando disponível
+
+      - name: Label de fase → Doing
+        if: github.event_name == 'issues' && github.event.action == 'labeled'
+        run: |
+          echo "Issue #${{ github.event.issue.number }} com label ${{ github.event.label.name }} → mover para Doing"
+
+      - name: PR merged → Done
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged
+        run: |
+          echo "PR #${{ github.event.pull_request.number }} merged → mover card para Done"
+
+      - name: Listar issues para debug
+        run: |
+          echo "Event: ${{ github.event_name }}"
+          echo "Action: ${{ github.event.action }}"

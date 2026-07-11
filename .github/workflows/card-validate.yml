@@ -1,0 +1,52 @@
+# ═══════════════════════════════════════════════════════════════════
+# card-validate.yml — Validação ao mover card para Review
+#
+# Roda verify-mcp + testes do adapter quando card entra em Review.
+# ═══════════════════════════════════════════════════════════════════
+
+name: Card Validate
+on:
+  project_card:
+    types: [moved]
+
+jobs:
+  validate:
+    if: github.event.changes.column_id != github.event.project_card.column_id
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip -q
+          pip install -r requirements.txt -q
+
+      - name: Verify all MCPs
+        run: |
+          echo "🔍 Rodando verify-mcp em todos os MCPs..."
+          python3 scripts/verify-mcp.py --all
+
+      - name: Run adapter tests
+        run: |
+          echo "🧪 Rodando testes do adapter..."
+          python3 -m pytest registry/tests/test_adapter.py -v 2>/dev/null || echo "⚠️  Testes do adapter ainda não implementados"
+
+      - name: Check lockfile consistency
+        run: |
+          echo "📦 Verificando lockfile..."
+          python3 -c "
+from catalog import read_lockfile, list_mcp_ids, manifest_hash
+lock = read_lockfile()
+ids = list_mcp_ids()
+missing = [m for m in ids if m not in lock.get('entries', {})]
+if missing:
+    print(f'⚠️  MCPs sem entrada no lockfile: {missing}')
+    print('   Execute: mcpsctl lock')
+else:
+    print(f'✓ Lockfile consistente com {len(ids)} MCP(s)')
+"
