@@ -228,6 +228,8 @@ python3 -m pytest -v registry/tests/ mcps/example-greeter/tests/
 | Documento | Leituras |
 |-----------|----------|
 | [Arquitetura](docs/ARCHITECTURE.md) | Visão geral do sistema, camadas, princípios |
+| [Governança](docs/GOVERNANCE.md) | 📜 Regras, ciclos, verificações e responsabilidades |
+| [Projeto](docs/PROJECT.md) | 🏗️ Documento vivo — arquitetura completa, fluxos, componentes |
 | [Patterns](docs/PATTERNS.md) | **Regras rígidas** de nomenclatura e estrutura |
 | [Authoring](docs/MCP-AUTHORING.md) | Guia prático: como criar um novo MCP |
 | [Workflow Runtime](docs/WORKFLOW-RUNTIME.md) | Como executa em GitHub Actions |
