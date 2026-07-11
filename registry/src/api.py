@@ -4,7 +4,7 @@ Endpoints para gestão de MCPs, consulta e execução.
 Usada pelo workflow runtime e por consumidores externos (pi-coding).
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -254,3 +254,47 @@ def check_mcp_compatibility(mcp_id: str):
         "reason": reason,
         "mcp_platforms": man.get("platforms", ["*"])
     }
+
+
+@app.post("/mcps/{mcp_id}/dispatch", status_code=202)
+def dispatch_mcp(mcp_id: str, background_tasks: BackgroundTasks):
+    """
+    Dispara execução de UM MCP específico via GitHub Actions (event-driven).
+    Retorna 202 Accepted com o run_id do workflow.
+    """
+    import subprocess
+    import json
+
+    man = catalog.read_manifest(mcp_id)
+    if not man:
+        raise HTTPException(404, f"MCP '{mcp_id}' não encontrado")
+
+    # Verifica compatibilidade
+    compatible, reason = plat.mcp_is_compatible(man)
+    if not compatible:
+        raise HTTPException(400, f"MCP '{mcp_id}' incompatível: {reason}")
+
+    # Dispara workflow via gh CLI
+    try:
+        result = subprocess.run(
+            ["gh", "workflow", "run", "mcp-runtime.yml",
+             "--repo", "camillanapoles/mcps-as-objects",
+             "-f", f"mcp_id={mcp_id}"],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0:
+            run_url = result.stdout.strip()
+            run_id = run_url.split("/")[-1] if run_url else ""
+            return {
+                "status": "dispatched",
+                "mcp_id": mcp_id,
+                "run_id": run_id,
+                "run_url": run_url,
+                "message": f"🚀 {mcp_id} disparado como workflow event"
+            }
+        else:
+            raise HTTPException(502, f"Falha ao disparar workflow: {result.stderr}")
+    except FileNotFoundError:
+        raise HTTPException(502, "gh CLI não disponível neste ambiente")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, "Timeout ao disparar workflow")

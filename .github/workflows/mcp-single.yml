@@ -1,0 +1,97 @@
+# ═══════════════════════════════════════════════════════════════════
+# mcp-single.yml — Executa UM único MCP (reusable / event-driven).
+#
+# Uso:
+#   gh workflow run mcp-runtime.yml -f mcp_id=python-termux-builder
+#   → Este workflow é chamado com o mcp_id específico.
+#
+# Design:
+#   - Cada execução roda APENAS 1 MCP
+#   - Cache snapshot compartilhado
+#   - Ideal para chamadas event-driven via API
+# ═══════════════════════════════════════════════════════════════════
+
+name: MCP Single
+
+on:
+  workflow_dispatch:
+    inputs:
+      mcp_id:
+        description: 'ID do MCP a executar'
+        required: true
+        type: string
+      input_payload:
+        description: 'Payload de entrada JSON (opcional)'
+        required: false
+        type: string
+        default: '{}'
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  run-mcp:
+    name: Run ${{ inputs.mcp_id }}
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute cache key
+        id: key
+        run: python3 scripts/compute-key.py
+
+      - name: Restore snapshot
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            registry/data/registry.db
+            .cache/snapshot
+          key: ${{ steps.key.outputs.key }}
+          restore-keys: |
+            mcp-snapshot-v1-
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore venv if cached
+        run: |
+          if [ -f .venv/bin/python3 ]; then
+            echo "✓ Virtualenv restaurado do cache"
+          else
+            echo "⚠ Cache miss — instalando dependências"
+            python3 -m venv .venv
+            .venv/bin/pip install --upgrade pip -q
+            .venv/bin/pip install -r requirements.txt -q
+          fi
+
+      - name: Execute MCP
+        id: execute
+        run: |
+          .venv/bin/python3 scripts/execute-mcp.py "${{ inputs.mcp_id }}"
+
+      - name: Check result
+        run: |
+          python3 -c "
+import json
+f = open('${{ inputs.mcp_id }}_output.json')
+data = json.load(f)
+all_ok = all(v.get('status')=='ok' for v in data.values())
+print(f'Resultados: {len(data)} funções')
+for fn, res in data.items():
+    status = res.get('status','?')
+    print(f'  {fn}: {status}')
+    if status != 'ok':
+        print(f'    error: {res.get(\"error\",\"?\")}')
+if not all_ok:
+    exit(1)
+"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: output-${{ inputs.mcp_id }}
+          path: ${{ inputs.mcp_id }}_output.json

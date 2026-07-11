@@ -23,6 +23,11 @@ on:
         required: false
         type: string
         default: '{}'
+      mcp_id:
+        description: 'ID específico do MCP (vazio = todos)'
+        required: false
+        type: string
+        default: ''
 
 env:
   PYTHON_VERSION: '3.12'
@@ -80,7 +85,7 @@ jobs:
       - name: List MCPs
         id: list-mcps
         run: |
-          .venv/bin/python3 scripts/list-mcps.py >> "$GITHUB_OUTPUT"
+          .venv/bin/python3 scripts/list-mcps.py "${{ github.event.inputs.mcp_id }}" >> "$GITHUB_OUTPUT"
 
       - name: Save snapshot after cache miss
         if: steps.cache.outputs.cache-hit != 'true'
