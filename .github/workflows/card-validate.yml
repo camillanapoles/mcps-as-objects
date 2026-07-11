@@ -31,10 +31,19 @@ jobs:
           echo "🔍 Rodando verify-mcp em todos os MCPs..."
           python3 scripts/verify-mcp.py --all
 
+      - name: Install test deps
+        run: |
+          pip install pytest pyyaml -q
+
       - name: Run adapter tests
         run: |
           echo "🧪 Rodando testes do adapter..."
-          python3 -m pytest registry/tests/test_adapter.py -v 2>/dev/null || echo "⚠️  Testes do adapter ainda não implementados"
+          python3 -m pytest registry/tests/test_adapter.py -v --tb=short
+
+      - name: Run all tests
+        run: |
+          echo "🧪 Rodando todos os testes..."
+          python3 -m pytest registry/tests/ mcps/*/tests/ -v --tb=short || echo "⚠️  Alguns testes falharam (verifique cada MCP)"
 
       - name: Check lockfile consistency
         run: |
