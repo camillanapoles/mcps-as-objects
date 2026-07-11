@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════
+# mcp-verify.yml — Verificação completa de conformidade de MCPs.
+#
+# Dispara em PRs/pushes que criam ou modificam um MCP.
+# Garante:
+#   📁 Estrutura de diretórios padrão
+#   📜 Manifesto contra schema
+#   🔧 Funções server.py condizentes
+#   🧪 Testes existem
+#   📦 Lockfile
+#   🚀 Pode ser chamado individualmente (event-driven)
+# ═══════════════════════════════════════════════════════════════════
+
+name: MCP Verify
+
+on:
+  pull_request:
+    paths:
+      - 'mcps/**'
+      - 'schemas/*.json'
+  push:
+    paths:
+      - 'mcps/**'
+      - 'schemas/*.json'
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  verify:
+    name: Verify MCPs
+    runs-on: ubuntu-22.04
+
+    outputs:
+      status: ${{ steps.run-verify.outputs.status }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip -q
+          pip install fastjsonschema mcp -q
+
+      - name: Detect changed MCPs
+        id: changed
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            mcps:
+              - 'mcps/**'
+
+      - name: List modified MCPs
+        id: list
+        run: |
+          python3 -c "
+import json, os, re
+from pathlib import Path
+
+# Detecta quais MCPs foram modificados
+# Usa git diff para encontrar diretórios mcps/<id> que mudaram
+import subprocess
+result = subprocess.run(['git', 'diff', '--name-only', 'origin/main...HEAD'],
+                       capture_output=True, text=True)
+changed_files = result.stdout.strip().split('\n')
+
+mcps_changed = set()
+for f in changed_files:
+    m = re.match(r'mcps/([^/]+)/', f)
+    if m:
+        mcps_changed.add(m.group(1))
+
+# Se não há diff (push direto), verifica todos
+if not mcps_changed:
+    mcps_changed = {'ALL'}
+
+print(f'mcps={json.dumps(sorted(mcps_changed))}')
+" >> "$GITHUB_OUTPUT"
+
+      - name: Run verification
+        id: run-verify
+        run: |
+          python3 -c "
+import sys, json
+sys.path.insert(0, 'registry/src')
+
+mcps = ${{ steps.list.outputs.mcps }}
+
+from pathlib import Path
+ROOT = Path('.')
+MCPS_DIR = ROOT / 'mcps'
+
+if mcps == ['ALL']:
+    from catalog import list_mcp_ids
+    ids = list_mcp_ids()
+else:
+    ids = mcps
+
+print(f'Verificando {len(ids)} MCP(s): {ids}')
+
+# Importa o verificador
+from scripts.verify_mcp import verify_one
+
+failed = []
+for mid in sorted(ids):
+    ok = verify_one(mid)
+    if not ok:
+        failed.append(mid)
+
+print(f'')
+print(f'Status: {\"PASS\" if not failed else \"FAIL\"}')
+print(f'MCPs verificados: {len(ids)}')
+print(f'Aprovados: {len(ids) - len(failed)}')
+print(f'Reprovados: {len(failed)}')
+if failed:
+    print(f'Falharam: {failed}')
+    sys.exit(1)
+"
+
+      - name: Comment PR
+        if: github.event_name == 'pull_request' && failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = '${{ steps.run-verify.outputs.status }}';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '## ❌ Verificação de MCPs falhou\n\n' +
+                    'Um ou mais MCPs não passaram na verificação de conformidade.\n\n' +
+                    'Execute `python3 scripts/verify-mcp.py <mcp_id>` localmente para mais detalhes.'
+            })

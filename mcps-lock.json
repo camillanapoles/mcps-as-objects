@@ -3,17 +3,17 @@
   "entries": {
     "example-greeter": {
       "version": "0.1.0",
-      "manifest_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "manifest_hash": "5f8ec17c6c10bbe34e138f1494d134ea8c8bc454394289c84084f98ec39724ee",
       "deps_hash": ""
     },
     "processador-texto": {
       "version": "0.1.0",
-      "manifest_hash": "971dd1a1a89d8cf7dc3a9ba0ae9b127a50aa3d05d0188607512456feb32e3ee5",
+      "manifest_hash": "6b1267bd74c7ae2de19d9d8d0844735caf8efc1a2bd67070801f8580dcfb03ba",
       "deps_hash": ""
     },
     "python-termux-builder": {
       "version": "0.1.0",
-      "manifest_hash": "f1234fc1f9e078703474bd013341404b991a5422a9576baadc84812f19047bb1",
+      "manifest_hash": "0507ebeab9845bc1f201a237f4abb9d5994d3f8e088eee5e5eb1a6543f0680c1",
       "deps_hash": ""
     }
   }
