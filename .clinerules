@@ -1,0 +1,306 @@
+# 🧠 Skill do Agente — Manutenção Contínua do mcps-as-objects
+
+> **Propósito**: Instruções permanentes para o agente (IA) ao interagir, modificar ou evoluir este projeto. Garante consistência, padrão e governança em toda intervenção.
+
+---
+
+## 1. Sempre Antes de Qualquer Ação
+
+```
+□ Li o estado atual do repositório?        (git log --oneline -5)
+□ Verifiquei se há algo não commitado?      (git status)
+□ Entendi qual MCP ou área será afetada?
+□ Já existe um padrão similar no projeto?  (procurar exemplos existentes)
+```
+
+---
+
+## 2. Regras de Ouro para o Agente
+
+### 2.1 Toda intervenção gera um MCP ou modifica um existente
+
+```
+QUALQUER funcionalidade nova → é um MCP ou é parte do registry?
+
+Nova função standalone?        → mcps/<id>/  (segue o template)
+Nova ferramenta de gestão?     → registry/src/ (API, MCP server, CLI)
+Nova verificação?              → scripts/verify-*.py + check no verify-mcp
+Nova regra?                    → docs/GOVERNANCE.md + schema
+```
+
+### 2.2 Todo MCP deve passar pelos 15 checks
+
+```
+Após criar/modificar um MCP, executar SEMPRE:
+
+    python3 scripts/verify-mcp.py <mcp_id>
+
+Se falhar → corrigir antes de prosseguir.
+Se avisar → avaliar se deve corrigir (avisos são aceitáveis com justificativa).
+```
+
+### 2.3 O lockfile é a verdade do cache
+
+```
+Após qualquer mudança em mcp.json → mcpsctl lock
+Nunca commitar mcp.json sem atualizar mcps-lock.json junto.
+
+Regra: git add mcps/<id>/mcp.json + mcps-lock.json (sempre no mesmo commit)
+```
+
+### 2.4 Separação de responsabilidades (core.py vs server.py)
+
+```
+core.py   → Lógica PURA (stdlib only, testável, sem MCP SDK)
+server.py → Apenas wrapper FastMCP (importa core.py, registra tools)
+
+Nunca colocar lógica de negócio em server.py.
+Nunca importar mcp dentro de core.py.
+```
+
+### 2.5 Dois modos de execução
+
+```
+Toda ferramenta new MCP decide:
+- LOCAL  (stdio/HTTP): lógica leve, resposta em ms, interage com pi
+- REMOTO (workflow):   lógica pesada, resposta em minutos, batch
+
+Se a operação leva <1s → LOCAL
+Se precisa de toolchain → REMOTO
+Se interage com pi → LOCAL
+Se compila/build → REMOTO
+```
+
+---
+
+## 3. Checklist de Verificação para o Agente
+
+### Ao criar um NOVO MCP
+
+```
+□ Nome kebab-case: mcps/<id>/
+□ Segue estrutura do _template/ (mcp.json, src/server.py, tests/)
+□ platforms definido (android/termux, linux/amd64, *, etc.)
+□ Manifesto válido contra schema
+□ server.py importa de core.py
+□ Testes testam core.py (não server.py)
+□ verify-mcp.py <id> → 0 erros
+□ mcps-lock.json atualizado
+□ Event-driven: gh workflow run ... -f mcp_id=<id> funciona
+```
+
+### Ao modificar um MCP EXISTENTE
+
+```
+□ Não quebrei a estrutura de diretórios?
+□ Manifesto ainda válido contra schema?
+□ Funções no server.py condizem com manifesto?
+□ Testes ainda passam?
+□ Lockfile atualizado?
+□ Verify-mcp passa?
+```
+
+### Ao modificar o REGISTRY
+
+```
+□ Testes em registry/tests/ passam?
+□ API: novos endpoints documentados?
+□ MCP server: novas tools registradas?
+□ CLI: novos comandos?
+□ Schemas atualizados se contrato mudou?
+```
+
+### Ao modificar WORKFLOWS
+
+```
+□ Segue padrão dos workflows existentes?
+□ Usa scripts/ em vez de inline multiline Python?
+□ inputs no workflow_dispatch documentados?
+□ Event-driven: aceita mcp_id opcional?
+□ Cache key consistente (sha256(mcps-lock.json))?
+```
+
+---
+
+## 4. Padrões de Código para o Agente
+
+### 4.1 Estrutura de um MCP
+
+```
+mcps/<mcp-id>/
+├── mcp.json              # 📜 Manifesto (contrato obrigatório)
+├── requirements.txt      # 📦 Dependências (se diferir do root)
+├── src/
+│   ├── core.py           # 🔧 Lógica pura (stdlib, testável)
+│   └── server.py         # 🔧 FastMCP wrapper (importa core.py)
+├── tests/
+│   └── test_smoke.py     # 🧪 Testes (testam core.py)
+└── README.md             # 📖 Documentação
+```
+
+### 4.2 Exemplo de core.py
+
+```python
+# core.py → SEMPRE sem dependência do mcp SDK
+# Use apenas stdlib ou dependências leves e disponíveis
+
+def minha_funcao(param: str) -> dict:
+    \"\"\"Lógica pura, testável, sem efeitos colaterais.\"\"\"
+    return {"resultado": param}
+```
+
+### 4.3 Exemplo de server.py
+
+```python
+# server.py → Apenas wrapper, importa de core.py
+from core import minha_funcao as _minha_funcao
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP(name="meu-mcp")  # SÓ name (sem description, sem version)
+
+@mcp.tool()
+def minha_funcao(param: str) -> dict:
+    \"\"\"Documentação da tool.\"\"\"
+    return _minha_funcao(param)
+```
+
+### 4.4 Nomes e convenções
+
+| Entidade | Padrão | Exemplo |
+|----------|--------|---------|
+| ID do MCP | kebab-case | `python-termux-builder` |
+| Função no manifesto | snake_case | `check_package` |
+| Função Python | snake_case | `def check_package():` |
+| Arquivo server | `src/server.py` | fixo |
+| Arquivo core | `src/core.py` | fixo |
+| Testes | `tests/test_*.py` | `test_smoke.py` |
+
+---
+
+## 5. Armadilhas Comuns (evitar)
+
+### 🚫 YAML + Python multiline = PROBLEMA
+
+```yaml
+# ❌ NUNCA faça isso (YAML indent + python indent conflitam)
+- run: |
+    python3 -c "
+          import sys
+          print('erro de indentação')
+    "
+
+# ✅ SEMPRE use scripts/
+- run: python3 scripts/meu-script.py
+```
+
+### 🚫 NUNCA colocar `description=` ou `version=` em FastMCP()
+
+```python
+# ❌ QUEBRA (FastMCP v1.28+ não aceita)
+mcp = FastMCP(name="x", description="...", version="1.0")
+
+# ✅ Correto
+mcp = FastMCP(name="x")
+```
+
+### 🚫 NUNCA importar `mcp` em `core.py`
+
+```python
+# ❌ QUEBRA (core.py precisa ser testável sem MCP SDK)
+from mcp.server.fastmcp import FastMCP  # NUNCA em core.py
+
+# ✅ Correto: importa em server.py, core.py fica limpo
+```
+
+### 🚫 NUNCA esquecer de atualizar mcps-lock.json
+
+```
+mcp.json mudou → mcps-lock.json precisa mudar também
+Se não → cache key fica desatualizada → snapshot não reflete novo estado
+```
+
+### 🚫 NUNCA hardcodar `--repo` faltando
+
+```python
+# ❌ gh workflow run sem --repo → falha em diretório diferente
+subprocess.run(["gh", "workflow", "run", ...])
+
+# ✅ Sempre com --repo
+subprocess.run(["gh", "workflow", "run", ..., "--repo", "camillanapoles/mcps-as-objects"])
+```
+
+---
+
+## 6. Fluxo de Decisão para o Agente
+
+```
+Usuário pede funcionalidade/change
+│
+├─ É um NOVO serviço/função?
+│  ├─ Sim → Deve ser um NOVO MCP?
+│  │  ├─ Sim → mcpsctl new <id> + implementar
+│  │  └─ Não → É ferramenta de gestão? → registry/src/
+│  │
+│  ├─ Determinar face (local, remoto, ambos)
+│  │  ├─ Leve + rápida + pi → LOCAL (server.py)
+│  │  ├─ Pesada + build → REMOTO (workflow)
+│  │  └─ Ambos → core.py + server.py + workflow
+│  │
+│  └─ Seguir checklist de criação
+│
+├─ É modificação em MCP existente?
+│  ├─ Seguir checklist de modificação
+│  └─ Verificar lockfile
+│
+├─ É modificação no registry?
+│  ├─ Seguir checklist do registry
+│  ├─ Atualizar schemas se necessário
+│  └─ Rodar testes
+│
+└─ É modificação em workflow?
+   ├─ Seguir checklist de workflows
+   ├─ Usar scripts/ (nunca inline multiline)
+   └─ Testar com gh workflow run
+```
+
+---
+
+## 7. Documentação Essencial (links)
+
+| Documento | Quando consultar |
+|-----------|-----------------|
+| `docs/GOVERNANCE.md` | Regras, ciclos, responsabilidades |
+| `docs/PROJECT.md` | Arquitetura completa, fluxos, componentes |
+| `docs/CRITERIA.md` | Decisão local vs remoto |
+| `docs/WORKFLOW-FEASIBILITY.md` | Se uma ideia de workflow é possível |
+| `docs/PATTERNS.md` | Nomenclatura, estrutura, convenções |
+| `docs/MCP-AUTHORING.md` | Guia prático de criação de MCP |
+| `schemas/mcp-manifest.schema.json` | Schema do manifesto (validação) |
+
+---
+
+## 8. Commandos Úteis para o Agente
+
+```bash
+# Verificar estado
+git status
+git log --oneline -5
+
+# Verificar MCPs
+python3 scripts/verify-mcp.py --all
+
+# Criar novo MCP
+python3 -c "from constructor import create_mcp; create_mcp('id', name='Nome')"
+
+# Atualizar lockfile
+python3 -c "from catalog import list_mcp_ids, read_manifest, manifest_hash, read_lockfile, write_lockfile; lock = read_lockfile(); [...]"
+
+# Validar manifesto
+python3 -c "from validator import validate_manifest_file; print(validate_manifest_file('mcps/<id>/mcp.json'))"
+
+# Rodar testes
+python3 -m pytest mcps/<id>/tests/ registry/tests/
+
+# Disparar workflow individual
+gh workflow run mcp-runtime.yml -f mcp_id=<id> --repo camillanapoles/mcps-as-objects
+```
