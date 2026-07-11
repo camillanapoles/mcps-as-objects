@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any, List
 import json
 
 import db, crud, catalog, validator, snapshot
+import platdetect as plat
 
 app = FastAPI(
     title="MCPs as Objects — Registry API",
@@ -217,4 +218,39 @@ def pipeline_graph():
     return {
         "nodes": list(graph.nodes.keys()),
         "order": [f"{n.mcp_id}.{n.function_name}" for n in graph.execution_order()]
+    }
+
+
+@app.get("/platform")
+def platform_info():
+    """Retorna info da plataforma atual."""
+    current = plat.detect_platform()
+    all_plats = plat.detect_platforms()
+    return {
+        "platform": current,
+        "label": plat.platform_label(current),
+        "all_applicable": all_plats
+    }
+
+
+@app.get("/mcps/compatible")
+def list_compatible_mcps():
+    """Lista apenas MCPs compatíveis com a plataforma atual."""
+    from catalog import scan_catalog_filtered
+    return scan_catalog_filtered(platform_filter=True)
+
+
+@app.get("/mcps/{mcp_id}/compatibility")
+def check_mcp_compatibility(mcp_id: str):
+    """Verifica se um MCP específico é compatível com a plataforma atual."""
+    man = catalog.read_manifest(mcp_id)
+    if not man:
+        raise HTTPException(404, f"MCP '{mcp_id}' não encontrado")
+    compatible, reason = plat.mcp_is_compatible(man)
+    return {
+        "mcp_id": mcp_id,
+        "platform": plat.detect_platform(),
+        "compatible": compatible,
+        "reason": reason,
+        "mcp_platforms": man.get("platforms", ["*"])
     }

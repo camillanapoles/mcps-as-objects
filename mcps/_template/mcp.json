@@ -19,17 +19,29 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "message": { "type": "string", "description": "Mensagem de entrada." }
+          "message": {
+            "type": "string",
+            "description": "Mensagem de entrada."
+          }
         },
-        "required": ["message"]
+        "required": [
+          "message"
+        ]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "echo": { "type": "string" },
-          "timestamp": { "type": "string" }
+          "echo": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
         },
-        "required": ["echo", "timestamp"]
+        "required": [
+          "echo",
+          "timestamp"
+        ]
       }
     }
   ],
@@ -38,5 +50,10 @@
     "consumes": [],
     "produces": []
   },
-  "tags": ["template"]
+  "tags": [
+    "template"
+  ],
+  "platforms": [
+    "*"
+  ]
 }

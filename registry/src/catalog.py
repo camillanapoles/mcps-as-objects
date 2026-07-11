@@ -57,6 +57,19 @@ def scan_catalog() -> Dict[str, dict]:
     return result
 
 
+def scan_catalog_filtered(platform_filter: bool = True) -> Dict[str, dict]:
+    """
+    Escaneia e filtra MCPs por compatibilidade de plataforma.
+    Útil para mostrar apenas MCPs que funcionam na máquina atual.
+    """
+    from platdetect import filter_mcps_by_platform
+    all_mcps = scan_catalog()
+    if platform_filter:
+        filtered = filter_mcps_by_platform(all_mcps)
+        return {mid: info["manifest"] for mid, info in filtered.items() if info["compatible"]}
+    return all_mcps
+
+
 def read_lockfile() -> dict:
     """Lê o mcps-lock.json."""
     if not LOCKFILE.exists():

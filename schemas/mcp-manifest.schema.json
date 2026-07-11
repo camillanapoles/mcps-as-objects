@@ -85,6 +85,15 @@
     "tags": {
       "type": "array",
       "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+    },
+    "platforms": {
+      "type": "array",
+      "description": "Plataformas onde este MCP funciona. '*' = qualquer. Formato: 'os/arch' ou 'os/variant'.",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z*]+(/[a-z0-9_-]+)?$"
+      },
+      "default": ["*"]
     }
   }
 }

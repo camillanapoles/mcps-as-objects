@@ -19,19 +19,43 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Nome da pessoa." },
-          "lang": { "type": "string", "enum": ["pt", "en", "es"], "default": "pt", "description": "Idioma" }
+          "name": {
+            "type": "string",
+            "description": "Nome da pessoa."
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "pt",
+              "en",
+              "es"
+            ],
+            "default": "pt",
+            "description": "Idioma"
+          }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "greeting": { "type": "string" },
-          "lang": { "type": "string" },
-          "timestamp": { "type": "string" }
+          "greeting": {
+            "type": "string"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          }
         },
-        "required": ["greeting", "lang", "timestamp"]
+        "required": [
+          "greeting",
+          "lang",
+          "timestamp"
+        ]
       }
     },
     {
@@ -40,25 +64,50 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "a": { "type": "number", "description": "Primeiro número" },
-          "b": { "type": "number", "description": "Segundo número" }
+          "a": {
+            "type": "number",
+            "description": "Primeiro número"
+          },
+          "b": {
+            "type": "number",
+            "description": "Segundo número"
+          }
         },
-        "required": ["a", "b"]
+        "required": [
+          "a",
+          "b"
+        ]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "result": { "type": "number" },
-          "operation": { "type": "string" }
+          "result": {
+            "type": "number"
+          },
+          "operation": {
+            "type": "string"
+          }
         },
-        "required": ["result", "operation"]
+        "required": [
+          "result",
+          "operation"
+        ]
       }
     }
   ],
   "permissions": [],
   "pipeline": {
     "consumes": [],
-    "produces": ["example-greeter.greet", "example-greeter.sum"]
+    "produces": [
+      "example-greeter.greet",
+      "example-greeter.sum"
+    ]
   },
-  "tags": ["example", "demo"]
+  "tags": [
+    "example",
+    "demo"
+  ],
+  "platforms": [
+    "*"
+  ]
 }

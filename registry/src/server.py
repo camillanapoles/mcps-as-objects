@@ -12,6 +12,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 import db, crud, catalog, constructor, validator, snapshot
+import platdetect as plat
 
 mcp = FastMCP(
     name="mcps-as-objects",
@@ -159,5 +160,23 @@ def pipeline_info() -> dict:
     }
 
 
+@mcp.tool()
+def platform_info() -> dict:
+    """Retorna informação da plataforma atual e MCPs compatíveis."""
+    current = plat.detect_platform()
+    all_plats = plat.detect_platforms()
+    from catalog import scan_catalog_filtered
+    compatible = list(scan_catalog_filtered(platform_filter=True).keys())
+    all_mcps = catalog.list_mcp_ids()
+    return {
+        "platform": current,
+        "label": plat.platform_label(current),
+        "all_applicable": all_plats,
+        "mcps_compatible": compatible,
+        "mcps_incompatible": [m for m in all_mcps if m not in compatible]
+    }
+
+
 if __name__ == "__main__":
+    mcp.run()
     mcp.run()
