@@ -1,6 +1,97 @@
 # 🏗️ Plano de Integração: mcp-builder → mcps-as-objects
 
 > **Bridge + Adapter + Compliance — Zero Hardcoded, 100% Gerenciado, Agnóstico, Replicável.**
+> **Gerenciado como GitHub Project (Kanban event-driven).**
+
+---
+
+## ═══════════════════════════════════════════════════════════════════
+## 0. GESTÃO DO PROJETO — KANBAN EVENT-DRIVEN
+## ═══════════════════════════════════════════════════════════════════
+
+### 0.1 GitHub Project (Kanban)
+
+```
+Board: Integração mcp-builder ↔ mcps-as-objects
+
+┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│   📋     │   │   🏗️    │   │   ✅     │   │   🚀     │   │   📦     │
+│ Backlog  │──▶│ Doing    │──▶│ Review   │──▶│ Staging  │──▶│ Done     │
+│          │   │          │   │          │   │          │   │          │
+│ Issues   │   │ Em       │   │ PR       │   │ Testado  │   │ Fechado  │
+│ prioriz. │   │ execução │   │ aberto   │   │ em CI    │   │ entregue │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └──────────┘
+      │              │              │              │              │
+      └──────────────┴────── Eventos ──────────────┴──────────────┘
+                          │
+                    ┌─────▼──────┐
+                    │ Workflows  │
+                    │ GitHub     │
+                    │ Actions    │
+                    │ · Issue →  │
+                    │   Board    │
+                    │ · PR →     │
+                    │   Review   │
+                    │ · Merge →  │
+                    │   Done     │
+                    └────────────┘
+```
+
+### 0.2 Labels (Tags)
+
+| Label | Cor | Significado |
+|-------|-----|-------------|
+| `fase-1-adapter` | 🔵 | Adapter core |
+| `fase-2-templates` | 🟢 | Templates complementares |
+| `fase-3-hooks` | 🟠 | Hook pós-scaffold |
+| `fase-4-fsm` | 🟣 | FSM + Blueprint + Registry |
+| `fase-5-governanca` | 🔴 | Hooks de governança |
+| `compliance` | 🟡 | Zero hardcoded / gerenciado / agnóstico |
+| `bug` | 🔴 | Erro |
+| `test` | 🟢 | Testes |
+| `docs` | 🔵 | Documentação |
+
+### 0.3 Milestones
+
+| Milestone | Previsão | Entregas |
+|-----------|----------|----------|
+| **M1 — Bridge Funcional** | Fase 1+2 | `adapter.ingest()` + templates |
+| **M2 — Integração Automática** | Fase 3 | Hook pós-scaffold |
+| **M3 — Unificação** | Fase 4 | FSM + Blueprint + Registry |
+| **M4 — Governança** | Fase 5 | Hooks cross-platform |
+
+### 0.4 Workflow Event-Driven do Próprio Projeto
+
+```yaml
+# .github/workflows/project-automation.yml
+# Auto-gerencia o Kanban baseado em eventos
+
+on:
+  issues:
+    types: [opened, labeled, closed]
+  pull_request:
+    types: [opened, ready_for_review, closed]
+
+jobs:
+  move-cards:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Issue aberta → Backlog
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        run: gh project item-add --project "Integração" --column "Backlog" $ISSUE
+
+      - name: Issue com label → Doing
+        if: github.event_name == 'issues' && github.event.action == 'labeled'
+        run: gh project item-move --project "Integração" --column "Doing" $ISSUE
+
+      - name: PR aberto → Review
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        run: gh project item-move --project "Integração" --column "Review" $PR
+
+      - name: PR merged → Done
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged
+        run: gh project item-move --project "Integração" --column "Done" $PR
+```
 
 ---
 
@@ -117,194 +208,362 @@ COBERTURA DE ESCOPO: 40% + 40% = 80%     COBERTURA: ~98%
 ---
 
 ## ═══════════════════════════════════════════════════════════════════
-## 4. COMPONENTES DO PLANO
+## 4. TASKLIST — FLASHCARDS COM CRITÉRIOS DE VALIDAÇÃO
 ## ═══════════════════════════════════════════════════════════════════
 
-### 4.1 Adapter — `registry/src/adapter.py`
+Cada card vira uma **Issue no GitHub** com template padronizado.
+
+### 📌 Template de Issue
+
+```markdown
+---
+title: "[FASE-X] Nome da tarefa"
+labels: [fase-x, tipo]
+assignees: camillanapoles
+project: Integração mcp-builder ↔ mcps-as-objects
+milestone: M1 — Bridge Funcional
+---
+
+## Descrição
+<!-- O que precisa ser feito -->
+
+## Critérios de Validação
+<!-- [ ] = check automático no CI -->
+- [ ] Código implementado
+- [ ] Testes passando (pytest)
+- [ ] verify-mcp 15 checks passando
+- [ ] Lockfile atualizado
+- [ ] PR aprovado e merged
+- [ ] CI verde (mcp-validate + mcp-verify)
+
+## Compliance
+- [ ] Zero hardcoded (sem string fixa do nome do MCP)
+- [ ] Gerenciado (DB + lockfile + verify)
+- [ ] Agnóstico (não depende de SDK específico)
+- [ ] Testado (testes no adapter + verify)
+
+## Dependências
+<!-- #issue se aplicável -->
+
+## Notas
+```
+
+---
+
+### 🃏 Card 1.1 — adapter.py: `ingest()` core
+
+```
+ID: #1
+Título: [FASE-1] adapter.ingest() — ler blueprint.yaml e gerar mcp.json
+Labels: fase-1-adapter, compliance
+Milestone: M1
+Esforço: M
+```
+
+**Implementação:**
 
 ```python
-"""
-adapter.py — Bridge entre mcp-builder (blueprint.yaml) e mcps-as-objects (mcp.json).
-
-Zero hardcoded: tudo lido de blueprint.yaml + schemas.
-Agnóstico: funciona com Python, TS, Go, Rust — qualquer SDK/pattern.
-Gerenciado: registra no DB, lockfile, verify.
-"""
-
-from pathlib import Path
-from typing import Optional
-from . import (
-    db, crud, catalog, validator,
-    constructor, verifier, snapshot
-)
-
-def ingest(
-    project_path: str,
-    platforms: Optional[list] = None,
-    overwrite: bool = False
-) -> dict:
+# registry/src/adapter.py
+def ingest(project_path: str, platforms: Optional[list] = None) -> dict:
     """
-    Ingere um projeto gerado pelo mcp-builder no ecossistema.
-
-    Fluxo:
-    1. Lê blueprint.yaml (se existir) ou mcp.json
-    2. Extrai: id, name, tools (viram functions), sdk, pattern, hooks
-    3. Cria diretório em mcps/<id>/ com mcp.json + server.py
-    4. Valida contra schema
-    5. Executa verify-mcp (15 checks)
-    6. Atualiza lockfile (SHA-256)
-    7. Registra no SQLite
-    8. Retorna resultado
-
-    Zero hardcoded: inputs vêm do blueprint + parâmetros.
-    Gerenciado: toda saída vai pro DB + lockfile.
-    Agnóstico: blueprint.sdk define como gerar server.py.
+    1. Lê blueprint.yaml do projeto gerado pelo mcp-builder
+    2. Extrai: name, tools → functions, sdk, pattern, hooks
+    3. Gera mcps/<id>/mcp.json (válido contra schema)
+    4. Chama verify-mcp (15 checks)
+    5. Chama mcpsctl lock (SHA-256)
+    6. Chama register_mcp() (SQLite)
+    7. Retorna {mcp_id, status, manifest_hash, run_id}
     """
-    ...
-
-def info(mcp_id: str) -> dict:
-    """
-    Retorna info consolidada de um MCP gerido:
-    - Manifesto (mcp.json)
-    - Blueprint (se existir)
-    - FSM states/transitions (se .mcp/state/ existir)
-    - Hooks declarados
-    - Runs recentes
-    - Status do cache
-    """
-    ...
-
-def sync(mcp_id: str) -> dict:
-    """
-    Sincroniza se o blueprint ou código mudou.
-    Revalida, religa lockfile, re-registra.
-    """
-    ...
 ```
 
-### 4.2 Template complementar no mcp-builder
+**Validação:**
 
-O `mcp-builder` precisa gerar 2 arquivos extras em cada template:
+- [ ] `adapter.ingest("mcps/example-greeter")` → mcp.json gerado identico ao original
+- [ ] `adapter.ingest("mcps/example-greeter")` → verify-mcp passa (0 erros)
+- [ ] `adapter.ingest("mcps/example-greeter")` → lockfile atualizado
+- [ ] `adapter.ingest("mcps/example-greeter")` → DB tem o MCP registrado
+- [ ] Zero hardcoded: blueprint.yaml é a única fonte
 
-**`mcp.json.hbs`** (contrato com mcps-as-objects):
+---
 
-```handlebars
-{
-  "id": "{{kebabCase name}}",
-  "name": "{{name}}",
-  "version": "0.1.0",
-  "description": "{{description}}",
-  "entry": "src/server.py",
-  "runtime": {
-    "language": "{{sdk}}",
-    "image": "ubuntu-22.04",
-    "estimated_duration_sec": 60
-  },
-  "functions": [
-    {{#each tools}}
-    {
-      "name": "{{snakeCase name}}",
-      "description": "{{description}}",
-      "input_schema": {{{json inputSchema}}},
-      "output_schema": {{{json outputSchema}}}
-    }{{#unless @last}},{{/unless}}
-    {{/each}}
-  ],
-  "platforms": ["*"],
-  "pipeline": { "consumes": [], "produces": [] },
-  "blueprint": {
-    "sdk": "{{sdk}}",
-    "pattern": "{{pattern}}",
-    "hooks": {{{json hooks}}}
-  }
-}
+### 🃏 Card 1.2 — adapter.py: `info()` e `sync()`
+
+```
+ID: #2
+Título: [FASE-1] adapter.info() e adapter.sync() — consulta e atualização
+Labels: fase-1-adapter
+Milestone: M1
+Esforço: P
 ```
 
-**`src/server.py.hbs`** (FastMCP wrapper — para templates Python):
+**Validação:**
 
-```handlebars
-"""
-{{description}}
-MCP server gerado por mcp-builder → gerenciado por mcps-as-objects.
-"""
-from mcp.server.fastmcp import FastMCP
-{{#if (eq sdk 'python')}}
-from . import core
-{{/if}}
+- [ ] `adapter.info("example-greeter")` → retorna manifesto + FSM + runs
+- [ ] `adapter.sync("example-greeter")` → se blueprint mudou, revalida, relock, re-registra
+- [ ] Se nada mudou, sync é no-op
+- [ ] Se algo mudou e quebrou verify, sync retorna erro
 
-mcp = FastMCP(name="{{kebabCase name}}")
+---
 
-{{#each tools}}
-@mcp.tool()
-def {{snakeCase name}}({{#each inputSchema.properties}}{{#if @key}}{{@key}}: {{type}}{{#unless @last}}, {{/unless}}{{/if}}{{/each}}) -> dict:
-    """{{description}}"""{{#if (eq ../sdk 'python')}}
-    return core.{{snakeCase name}}({{#each inputSchema.properties}}{{#if @key}}{{@key}}={{@key}}{{#unless @last}}, {{/unless}}{{/if}}{{/each}}){{/if}}
-{{/each}}
+### 🃏 Card 1.3 — Testes do adapter
 
-if __name__ == "__main__":
-    mcp.run()
+```
+ID: #3
+Título: [FASE-1] Testes do adapter (unit + integration)
+Labels: fase-1-adapter, test
+Milestone: M1
+Esforço: G
 ```
 
-### 4.3 Hook pós-scaffold — `hooks/post-scaffold.ts`
+**Arquivo:** `registry/tests/test_adapter.py`
 
-```typescript
-/**
- * post-scaffold.ts — Hook de integração mcp-builder ↔ mcps-as-objects
- *
- * Categoria: event (disparado após scaffold bem-sucedido)
- * Função: chama adapter.ingest() para registrar o MCP no ecossistema
- *
- * Zero hardcoded: caminhos vêm do HookContext.
- * Gerenciado: se ingest falhar, hook bloqueia.
- */
+**Validação:**
 
-import { Hook } from '../builder/src/types';
+- [ ] `test_ingest_example_greeter()` — ingest do example-greeter existente
+- [ ] `test_ingest_novo_mcp()` — ingest de um blueprint.yaml novo
+- [ ] `test_ingest_sem_blueprint()` — fallback se não tem blueprint.yaml
+- [ ] `test_ingest_sdk_python()` — SDK Python
+- [ ] `test_ingest_sdk_typescript()` — SDK TypeScript
+- [ ] `test_ingest_sdk_go()` — SDK Go
+- [ ] `test_ingest_sdk_rust()` — SDK Rust
+- [ ] `test_ingest_pattern_stateless()` — pattern stateless
+- [ ] `test_ingest_pattern_event()` — pattern event
+- [ ] `test_ingest_pattern_factory()` — pattern factory
+- [ ] `test_info()` — info retorna dados corretos
+- [ ] `test_sync_sem_mudanca()` — sync é no-op
+- [ ] `test_sync_com_mudanca()` — sync reage a mudança
+- [ ] `test_sync_quebra_verify()` — sync bloqueia se verify falha
+- [ ] Zero hardcoded: nenhum nome de MCP fixo nos testes (usa parametrize)
 
-export const postScaffoldHook: Hook = async (ctx, payload) => {
-  const { projectPath } = payload as { projectPath: string };
-  const { logger } = ctx;
+---
 
-  try {
-    // Chama o adapter Python via subprocess JSON
-    const result = await execPythonAdapter('ingest', {
-      project_path: projectPath,
-      platforms: ['*'],
-    });
+### 🃏 Card 2.1 — Template `mcp.json.hbs`
 
-    if (!result.ok) {
-      return {
-        ok: false,
-        block: {
-          reason: `Adapter rejeitou o MCP: ${result.error}`,
-          suggestions: [
-            'Verifique blueprint.yaml',
-            'Execute adapter.ingest() manualmente para ver erros',
-          ],
-        },
-      };
-    }
+```
+ID: #4
+Título: [FASE-2] Template mcp.json.hbs no mcp-builder (4 SDKs × 3 patterns)
+Labels: fase-2-templates
+Milestone: M1
+Esforço: M
+```
 
-    logger.info(`MCP registrado: ${result.mcp_id}`);
-    return { ok: true, artifacts: result.artifacts };
-  } catch (err) {
-    return {
-      ok: false,
-      block: {
-        reason: `Falha no adapter: ${err.message}`,
-        suggestions: ['Verifique se mcps-as-objects está acessível'],
-      },
-    };
-  }
-};
+**12 arquivos a criar/alterar:**
+
+```
+templates/python-sdk/stateless/mcp.json.hbs
+templates/python-sdk/event/mcp.json.hbs
+templates/python-sdk/factory/mcp.json.hbs
+templates/typescript-sdk/stateless/mcp.json.hbs
+templates/typescript-sdk/event/mcp.json.hbs
+templates/typescript-sdk/factory/mcp.json.hbs
+templates/go-sdk/stateless/mcp.json.hbs
+templates/go-sdk/event/mcp.json.hbs
+templates/go-sdk/factory/mcp.json.hbs
+templates/rust-sdk/stateless/mcp.json.hbs
+templates/rust-sdk/event/mcp.json.hbs
+templates/rust-sdk/factory/mcp.json.hbs
+```
+
+**Validação:**
+
+- [ ] `npx mcp-builder new x --sdk python --pattern stateless` → gera `mcp.json`
+- [ ] `npx mcp-builder new x --sdk python --pattern event` → gera `mcp.json`
+- [ ] `npx mcp-builder new x --sdk python --pattern factory` → gera `mcp.json`
+- [ ] Idem para TypeScript, Go, Rust
+- [ ] `mcp.json` gerado é válido contra `schemas/mcp-manifest.schema.json`
+- [ ] `mcp.json` gerado tem `blueprint.sdk` e `blueprint.pattern` corretos
+- [ ] `mcp.json` gerado tem `functions` convertidas de `tools`
+
+---
+
+### 🃏 Card 2.2 — Template `src/server.py.hbs` (Python)
+
+```
+ID: #5
+Título: [FASE-2] Template server.py.hbs (FastMCP wrapper Python)
+Labels: fase-2-templates
+Milestone: M1
+Esforço: M
+```
+
+**Validação:**
+
+- [ ] Gera `src/server.py` com `FastMCP(name=...)`
+- [ ] Gera `@mcp.tool()` para cada tool declarada
+- [ ] Importa de `core` (lógica pura)
+- [ ] `verify-mcp` passa (tools condizentes com manifesto)
+- [ ] `python src/server.py` inicia sem erro
+
+---
+
+### 🃏 Card 3.1 — Hook pós-scaffold
+
+```
+ID: #6
+Título: [FASE-3] Hook post-scaffold — chama adapter.ingest automaticamente
+Labels: fase-3-hooks
+Milestone: M2
+Esforço: G
+```
+
+**Validação:**
+
+- [ ] `mcp-builder new x` → hook dispara automaticamente
+- [ ] Hook chama `adapter.ingest()` com o path do projeto gerado
+- [ ] Se adapter retorna ok → hook retorna ok
+- [ ] Se adapter retorna erro → hook bloqueia (gate)
+- [ ] Mensagem de erro contém sugestões de correção
+
+---
+
+### 🃏 Card 4.1 — FSM no Registry
+
+```
+ID: #7
+Título: [FASE-4] FSM Engine integrada ao Registry (ler .mcp/state/)
+Labels: fase-4-fsm
+Milestone: M3
+Esforço: G
+```
+
+**Validação:**
+
+- [ ] `GET /mcps/{id}/fsm` → retorna estados + transições do `.mcp/state/`
+- [ ] `GET /mcps/{id}/fsm/current` → estado atual (do DB runs)
+- [ ] `GET /mcps/{id}/fsm/mermaid` → diagrama Mermaid
+- [ ] Registry mostra FSM de MCPs gerados pelo mcp-builder
+
+---
+
+### 🃏 Card 4.2 — Blueprint no Registry
+
+```
+ID: #8
+Título: [FASE-4] Blueprint exposto no Registry (ler blueprint.yaml)
+Labels: fase-4-fsm
+Milestone: M3
+Esforço: M
+```
+
+**Validação:**
+
+- [ ] `GET /mcps/{id}/blueprint` → retorna blueprint.yaml parseado
+- [ ] Blueprint fica visível no `mcpsctl describe <id>`
+- [ ] Se não tem blueprint, retorna 404 com mensagem clara
+
+---
+
+### 🃏 Card 5.1 — 5 Hooks de Governança
+
+```
+ID: #9
+Título: [FASE-5] 5 hooks de governança disponíveis no Registry
+Labels: fase-5-governanca, compliance
+Milestone: M4
+Esforço: GG
+```
+
+**Hooks a portar do mcp-builder:**
+
+| Hook | Categoria | Função |
+|------|-----------|--------|
+| `cost-limit` | gate | Bloqueia se custo LLM exceder orçamento |
+| `rate-limit` | gate | Rate limiter sliding window |
+| `audit-log` | monitor | Append-only log + webhook |
+| `dependency-vulns` | advisor | Bloqueia release com vulns |
+| `prompt-injection-detector` | gate | Detecta 7 padrões de injection |
+
+**Validação:**
+
+- [ ] Cada hook tem versão Python (para executar local)
+- [ ] Cada hook tem versão TS (para executar em workflow)
+- [ ] `POST /mcps/{id}/hooks/run?hook=rate-limit` → executa hook
+- [ ] `POST /mcps/{id}/hooks/run?hook=cost-limit` → bloqueia se excedido
+- [ ] Testes unitários para cada hook (mínimo 5 testes por hook)
+- [ ] Documentação de cada hook
+
+---
+
+### 🃏 Card 5.2 — Workflow de Projeto (GitHub Project Automation)
+
+```
+ID: #10
+Título: [FASE-5] Workflow de automação do Kanban (project-automation.yml)
+Labels: fase-5-governanca
+Milestone: M4
+Esforço: P
+```
+
+**Validação:**
+
+- [ ] Issue aberta → card vai para Backlog
+- [ ] Issue com label → card vai para Doing
+- [ ] PR aberto → card vai para Review
+- [ ] PR merged → card vai para Done
+- [ ] Tudo via GitHub Actions (event-driven)
+
+---
+
+## ═══════════════════════════════════════════════════════════════════
+## 5. WORKFLOWS DO PRÓPRIO PROJETO (EVENT-DRIVEN)
+## ═══════════════════════════════════════════════════════════════════
+
+### 5.1 Automação do Kanban
+
+```yaml
+# .github/workflows/project-automation.yml
+name: Project Automation
+on:
+  issues:
+    types: [opened, labeled, closed]
+  pull_request:
+    types: [opened, ready_for_review, closed]
+
+jobs:
+  automate:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Issue opened → Backlog
+        uses: actions/github-script@v7
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        with:
+          script: |
+            await github.rest.projects.createCard({
+              column_id: COLUMN_BACKLOG,
+              content_id: context.payload.issue.id,
+              content_type: 'Issue'
+            })
+```
+
+### 5.2 CI por Card (validação automática)
+
+```yaml
+# .github/workflows/card-validate.yml
+# Dispara quando card move para "Review"
+name: Card Validate
+on:
+  project_card:
+    types: [moved]
+
+jobs:
+  validate:
+    if: github.event.changes.column_id == COLUMN_REVIEW
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rodar verify-mcp
+        run: python3 scripts/verify-mcp.py --all
+      - name: Rodar testes do adapter
+        run: python3 -m pytest registry/tests/test_adapter.py -v
 ```
 
 ---
 
 ## ═══════════════════════════════════════════════════════════════════
-## 5. FLUXO COMPLETO (passo a passo)
+## 6. FLUXO COMPLETO (passo a passo)
 ## ═══════════════════════════════════════════════════════════════════
 
-### 5.1 Criar e Gerenciar um MCP (ciclo completo)
+### 6.1 Criar e Gerenciar um MCP
 
 ```
 PASSO 1: mcp-builder new
@@ -316,7 +575,7 @@ $ npx mcp-builder new sentiment-analyzer \
   │   ├─ blueprint.yaml
   │   ├─ mcp.json                  ← NOVO (contrato)
   │   ├─ src/server.py             ← NOVO (FastMCP wrapper)
-  │   ├─ src/*.py                  ← lógica do template factory
+  │   ├─ src/*.py                  ← lógica
   │   ├─ tests/
   │   ├─ .mcp/state/               ← FSM
   │   └─ .github/workflows/        ← CI/CD
@@ -329,164 +588,61 @@ PASSO 2: adapter.ingest (automático via hook)
       --from mcps/sentiment-analyzer
 
   ├─ Lê blueprint.yaml
-  │   ├─ name: sentiment-analyzer
-  │   ├─ sdk: python
-  │   ├─ pattern: factory
-  │   ├─ tools: [analyze, train, evaluate]
-  │   └─ hooks: [cost-limit, rate-limit]
-  │
   ├─ Valida mcp.json contra schema
-  ├─ verify-mcp sentiment-analyzer
-  │   ├─ 📁 Estrutura ✅
-  │   ├─ 📜 Schema ✅
-  │   ├─ 🔧 Tools condizentes ✅
-  │   ├─ 🧪 Testes existem ✅
-  │   └─ 15 checks → 0 erros ✅
-  │
-  ├─ mcpsctl lock
-  │   └─ SHA-256: a1b2c3... → cache key
-  │
+  ├─ verify-mcp → 0 erros
+  ├─ mcpsctl lock → SHA-256
   └─ register no SQLite
-      ├─ mcps: id, name, version, manifest_hash
-      ├─ functions: analyze, train, evaluate
-      └─ runs: (vazio — primeiro run ainda não aconteceu)
 
 PASSO 3: Gerenciar (mcps-as-objects)
 ─────────────────────────────────────
   $ curl http://localhost:8712/mcps/sentiment-analyzer
-  → { id, name, functions, ..., blueprint: { sdk, pattern, hooks } }
-
   $ curl -X POST http://localhost:8712/mcps/sentiment-analyzer/dispatch
-  → { run_id, status: "dispatched" }
-
-  $ gh workflow run mcp-runtime.yml -f mcp_id=sentiment-analyzer
-  → Executa SOMENTE sentiment-analyzer com FSM:
-      draft → testing → staging → release
-      Hooks: cost-limit ✅, rate-limit ✅
 ```
 
-### 5.2 Zero Hardcoded — Evidência
+### 6.2 Ciclo de Desenvolvimento da Própria Integração
 
 ```
-BLUEPRINT.YAML (fonte):          MCP.JSON (gerado):
-─────────────────────            ───────────────────
-name: sentiment-analyzer         id: sentiment-analyzer
-sdk: python                      runtime.language: python
-pattern: factory                 
-tools:                           functions:
-  - name: analyze                  - name: analyze
-    inputSchema: {}                  input_schema: {}
-  - name: train                    - name: train
-    inputSchema: {}                  input_schema: {}
+1. Criar Issue com template de card
+   → Workflow move para "Backlog"
 
-NENHUM valor fixo em adapter.py.  Tudo lido do blueprint + schemas.
-Adapter.py NÃO contém:
-  ❌ "sentiment-analyzer" — hardcoded ❌
-  ❌ "python" — hardcoded ❌
-  ❌ "factory" — hardcoded ❌
-  ✅ blueprint.yaml → adapter → DB
+2. Iniciar desenvolvimento
+   → Label fase-X → workflow move para "Doing"
+
+3. Abrir PR com implementação
+   → Workflow move para "Review"
+   → CI roda testes + verify-mcp
+
+4. Aprovar e mergear PR
+   → Workflow move para "Done"
+   → Card fecha automaticamente
 ```
 
 ---
 
 ## ═══════════════════════════════════════════════════════════════════
-## 6. MCPs DA INTEGRAÇÃO (objetos gerenciados)
+## 7. FASES DE IMPLEMENTAÇÃO (com milestones e cards)
 ## ═══════════════════════════════════════════════════════════════════
 
-Cada **componente da integração** vira um MCP gerenciado:
-
-| MCP | Função | Local/Remoto | Depende de |
-|-----|--------|-------------|------------|
-| `mcp-builder` | Scaffold de MCPs (CLI/server/API) | **Local** | blueprint.yaml |
-| `mcps-as-objects` | Registry, DB, API, cache, verify | **Local** | SQLite, schemas |
-| `adapter-bridge` | Ponte entre builder e registry | **Local** | mcp-builder + mcps-as-objects |
-| `verify-mcp` | 15 checks de conformidade | **Local** | schemas/ |
-| `fsm-engine` | Máquina de estados GitOps | **Local** | .mcp/state/ |
-| `hook-system` | Gate/trigger/event/monitor/advisor | **Local+Remoto** | hooks/ |
-| `template-engine` | Geração de templates (4 SDKs × 3) | **Local** | templates/ |
-
-**Cada um desses MCPs segue o padrão:** `mcp.json`, `src/core.py`, `src/server.py`, `tests/`, lockfile, verify.
-
----
-
-## ═══════════════════════════════════════════════════════════════════
-## 7. FASES DE IMPLEMENTAÇÃO
-## ═══════════════════════════════════════════════════════════════════
-
-### Fase 1 — Adapter Core (bridge mínimo)
-
 ```
-Duração: ~2 sessões
-Entrega: adapter.ingest() funcional
+MILESTONE M1 — BRIDGE FUNCIONAL
+├── 🃏 Card 1.1 — adapter.ingest() core
+├── 🃏 Card 1.2 — adapter.info() e adapter.sync()
+├── 🃏 Card 1.3 — Testes do adapter (15 testes)
+├── 🃏 Card 2.1 — Template mcp.json.hbs (12 arquivos)
+└── 🃏 Card 2.2 — Template server.py.hbs (Python)
 
-Arquivos:
-  registry/src/adapter.py         ← core bridge
-  registry/tests/test_adapter.py  ← testes do adapter
-  schemas/adapter.schema.json     ← contrato adapter (opcional)
+MILESTONE M2 — INTEGRAÇÃO AUTOMÁTICA
+├── 🃏 Card 3.1 — Hook post-scaffold
+└── 🃏 Card 2.2 — (continuação)
 
-MCPs envolvidos:
-  ✅ mcps-as-objects (registry)
-  ⏳ mcp-builder (precisa esperar)
-```
+MILESTONE M3 — UNIFICAÇÃO
+├── 🃏 Card 4.1 — FSM Engine no Registry
+└── 🃏 Card 4.2 — Blueprint no Registry
 
-### Fase 2 — Templates Complementares
-
-```
-Duração: ~2 sessões
-Entrega: mcp-builder gera mcp.json + server.py
-
-Arquivos (no mcp-builder):
-  templates/*/mcp.json.hbs        ← novo template
-  templates/*/src/server.py.hbs   ← novo template
-
-MCPs envolvidos:
-  ✅ mcp-builder
-```
-
-### Fase 3 — Hook pós-scaffold
-
-```
-Duração: ~1 sessão
-Entrega: mcp-builder chama adapter automaticamente
-
-Arquivos (no mcp-builder):
-  hooks/post-scaffold.ts          ← hook de integração
-
-MCPs envolvidos:
-  ✅ mcp-builder
-  ✅ adapter-bridge
-```
-
-### Fase 4 — FSM + Blueprint + Registry (unificação)
-
-```
-Duração: ~3 sessões
-Entrega: Registry mostra FSM, blueprints, hooks
-
-Arquivos (no mcps-as-objects):
-  registry/src/fsm.py             ← leitor de states.yaml
-  registry/src/blueprint.py       ← leitor de blueprint.yaml
-  registry/src/api.py             ← novos endpoints
-
-MCPs envolvidos:
-  ✅ mcps-as-objects
-  ✅ fsm-engine
-  ✅ template-engine
-```
-
-### Fase 5 — Hooks de Governança (cross-platform)
-
-```
-Duração: ~2 sessões
-Entrega: 5 hooks do mcp-builder disponíveis no registry
-
-Arquivos:
-  hooks/ → (copiados do mcp-builder)
-  registry/src/hooks/ → adapters Python para cada hook
-
-MCPs envolvidos:
-  ✅ hook-system
-  ✅ mcps-as-objects
+MILESTONE M4 — GOVERNANÇA
+├── 🃏 Card 5.1 — 5 hooks de governança
+├── 🃏 Card 5.2 — Workflow de automação do Kanban
+└── 🃏 Card 5.3 — Documentação final
 ```
 
 ---
@@ -504,6 +660,7 @@ MCPs envolvidos:
 □ adapter.py usa schemas/ para validar saída
 □ server.py.hbs usa Handlebars (não string concatenada)
 □ mcp.json.hbs usa Handlebars (não string concatenada)
+□ Testes usam parametrize, não nomes fixos
 ```
 
 ### 8.2 100% Gerenciado
@@ -514,7 +671,7 @@ MCPs envolvidos:
 □ adapter.ingest() chama verify-mcp
 □ adapter.ingest() retorna erro se verify falhar
 □ adapter.sync() atualiza lockfile + DB se blueprint mudar
-□ adapter.info() retorna dados consolidados (manifesto + FSM + runs)
+□ adapter.info() retorna dados consolidados
 ```
 
 ### 8.3 Agnóstico
@@ -534,7 +691,6 @@ MCPs envolvidos:
 □ Cache key inclui SHA-256 do blueprint + manifesto
 □ FSM é determinística (states.yaml + transitions.yaml versionados)
 □ Testes do adapter rodam em CI (mcp-verify.yml)
-□ Dockerfile opcional para ambiente replicável
 ```
 
 ---
@@ -543,29 +699,43 @@ MCPs envolvidos:
 ## 9. MÉTRICAS DE SUCESSO
 ## ═══════════════════════════════════════════════════════════════════
 
-| Métrica | Atual | Alvo pós-integração |
-|---------|-------|---------------------|
-| MCPs gerenciados | 4 (só Python) | Ilimitado (4 SDKs × 3 padrões) |
-| Templates disponíveis | 1 (`_template/`) | 13 (1 + 12 do mcp-builder) |
-| Cobertura de escopo | 40%+40% = 80% | **~98%** |
-| Testes | 27 (registry) + 161 (builder) | **188** (ambos + adapter) |
-| Hooks de governança | 0 | **5** (cost-limit, rate-limit, audit-log, dep-vulns, prompt-injection) |
-| FSM implementada | workflow linear | **6 estados** (draft→testing→staging→release + fail, error) |
-| Zero hardcoded compliance | Parcial | **100%** (verificado por teste de lint) |
-| Tempo para criar + gerenciar MCP | ~2min manual | **~5s** (mcp-builder + hook + adapter) |
+| Métrica | Atual | Alvo pós-integração | Verificado por |
+|---------|-------|---------------------|----------------|
+| MCPs gerenciados | 4 (só Python) | Ilimitado (4 SDKs × 3 padrões) | `GET /mcps` |
+| Templates disponíveis | 1 (`_template/`) | 13 (1 + 12 do mcp-builder) | `ls templates/` |
+| Cobertura de escopo | 40%+40% = 80% | **~98%** | checklist compliance |
+| Testes do adapter | 0 | **15** | `pytest registry/tests/test_adapter.py` |
+| Hooks de governança | 0 | **5** | `POST /mcps/{id}/hooks/run?hook=...` |
+| FSM implementada | workflow linear | **6 estados** | `GET /mcps/{id}/fsm` |
+| Zero hardcoded | Parcial | **100%** | teste de lint no CI |
+| Tempo criar + gerenciar MCP | ~2min manual | **~5s** | `mcp-builder new + hook` |
+| Cards no Kanban | 0 | **10** | GitHub Project |
+| Workflows de automação | 0 | **3** | `.github/workflows/project-*.yml` |
 
 ---
 
 ## ═══════════════════════════════════════════════════════════════════
-## 10. PRÓXIMOS PASSOS (ação imediata)
+## 10. CRIAÇÃO DAS ISSUES (próxima ação)
 ## ═══════════════════════════════════════════════════════════════════
 
-| Passo | Ação | Responsável |
-|-------|------|-------------|
-| **1** | Revisar este plano e aprovar | Você |
-| **2** | Iniciar Fase 1 — adapter.py | Eu implemento |
-| **3** | Testar adapter com example-greeter (prova real) | Eu + você |
-| **4** | Iniciar Fase 2 — templates complementares no mcp-builder | Eu implemento |
-| **5** | Integrar via PR na branch `feat/pi-ecosystem-management` | GitOps |
+Após aprovação deste plano, o próximo passo é:
 
-**Aguardando sua ordem para iniciar a implementação da Fase 1.** 🚀
+1. Criar **GitHub Project** "Integração mcp-builder ↔ mcps-as-objects" (Kanban)
+2. Abrir **10 Issues** (uma por card) com labels e milestones
+3. Configurar **3 workflows** de automação do projeto
+4. Iniciar **Card 1.1** — implementação do `adapter.ingest()`
+
+```bash
+# Comandos para criar o Project e Issues via CLI:
+gh project create "Integração mcp-builder ↔ mcps-as-objects" --org camillanapoles
+gh issue create --title "[FASE-1] adapter.ingest()" --label fase-1-adapter
+gh issue create --title "[FASE-1] adapter.info() e adapter.sync()" --label fase-1-adapter
+# ... etc
+```
+
+---
+
+**Aguardando sua ordem para:**
+1. ✅ Aprovar o plano revisado
+2. 🔧 Criar o GitHub Project + Issues + Workflows
+3. 🚀 Iniciar implementação do Card 1.1
