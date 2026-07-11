@@ -228,6 +228,7 @@ python3 -m pytest -v registry/tests/ mcps/example-greeter/tests/
 | Documento | Leituras |
 |-----------|----------|
 | [Arquitetura](docs/ARCHITECTURE.md) | Visão geral do sistema, camadas, princípios |
+| [Critérios de Uso](docs/CRITERIA.md) | ⚡ Quando usar LOCAL (stdio) vs REMOTO (GitHub Actions) |
 | [Governança](docs/GOVERNANCE.md) | 📜 Regras, ciclos, verificações e responsabilidades |
 | [Projeto](docs/PROJECT.md) | 🏗️ Documento vivo — arquitetura completa, fluxos, componentes |
 | [Patterns](docs/PATTERNS.md) | **Regras rígidas** de nomenclatura e estrutura |
