@@ -157,7 +157,7 @@ def check_package(package_name: str, python_version: str = "3.12") -> dict:
 
 
 def build_wheel(package_name: str, package_version: str = "",
-                python_version: str = "3.12") -> dict:
+                python_version: str = "3.12", arch: str = "aarch64") -> dict:
     """
     Dispara build externo de wheel aarch64 via GitHub Actions (gh CLI).
     """
@@ -168,6 +168,7 @@ def build_wheel(package_name: str, package_version: str = "",
             "--repo", GH_REPO,
             "-f", f"python_version={python_version}",
             "-f", f"package_name={pkg}",
+            "-f", f"arch={arch}",
         ]
         if package_version:
             cmd.extend(["-f", f"package_version={package_version}"])
@@ -177,7 +178,7 @@ def build_wheel(package_name: str, package_version: str = "",
             run_id = run_url.split("/")[-1] if run_url else ""
             return {
                 "success": True, "action": "build_triggered",
-                "package": pkg, "python_version": python_version,
+                "package": pkg, "python_version": python_version, "arch": arch,
                 "run_id": run_id, "run_url": run_url,
                 "status": "queued", "error": ""
             }
@@ -186,11 +187,11 @@ def build_wheel(package_name: str, package_version: str = "",
 
     return {
         "success": False, "action": "manual_instructions",
-        "package": pkg, "python_version": python_version,
+        "package": pkg, "python_version": python_version, "arch": arch,
         "run_id": "", "run_url": "", "status": "unknown",
         "error": (
             "gh CLI não disponível. Para build manual:\n"
-            f"  gh workflow run {GH_WORKFLOW} --repo {GH_REPO} -f python_version={python_version} -f package_name={pkg}\n"
+            f"  gh workflow run {GH_WORKFLOW} --repo {GH_REPO} -f python_version={python_version} -f package_name={pkg} -f arch={arch}\n"
             f"  gh run download <run-id> --repo={GH_REPO} -n wheels --dir {CACHE_DIR}"
         )
     }

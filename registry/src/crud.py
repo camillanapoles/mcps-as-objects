@@ -20,9 +20,13 @@ def register_mcp(conn: sqlite3.Connection, mcp_id: str) -> Optional[dict]:
 
     mhash = catalog.manifest_hash(mcp_id)
     manifest_path = str(catalog.ROOT / mcp_id / "mcp.json")
+
+    # Extract arch from runtime if present
+    arch = man.get("runtime", {}).get("arch", "")
+
     conn.execute("""
-        INSERT INTO mcps (id, name, version, description, manifest_path, manifest_hash, status, production_enabled, sdk)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO mcps (id, name, version, description, manifest_path, manifest_hash, status, production_enabled, sdk, arch)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             version=excluded.version,
@@ -30,12 +34,14 @@ def register_mcp(conn: sqlite3.Connection, mcp_id: str) -> Optional[dict]:
             manifest_path=excluded.manifest_path,
             manifest_hash=excluded.manifest_hash,
             sdk=excluded.sdk,
+            arch=excluded.arch,
             updated_at=CURRENT_TIMESTAMP
     """, (mcp_id, man["name"], man["version"], man.get("description", ""),
           manifest_path, mhash,
           man.get("status", "TODO"),
           man.get("production_enabled", False),
-          man.get("sdk", "python")))
+          man.get("sdk", "python"),
+          arch))
 
     # Atualiza funções
     conn.execute("DELETE FROM functions WHERE mcp_id = ?", (mcp_id,))

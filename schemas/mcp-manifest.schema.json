@@ -32,6 +32,11 @@
       "properties": {
         "language": { "enum": ["python", "node", "go"] },
         "image": { "type": "string", "description": "Imagem base do runner (Docker ou ubuntu-22.04 etc)." },
+        "arch": {
+          "type": "string",
+          "description": "Arquitetura alvo de build (aarch64, x86_64, armv7l, i686). Default: aarch64.",
+          "default": "aarch64"
+        },
         "estimated_duration_sec": { "type": "integer", "minimum": 1, "maximum": 3600 },
         "dependencies": {
           "type": "object",

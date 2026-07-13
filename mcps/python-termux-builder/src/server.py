@@ -31,7 +31,7 @@ def check_package(package_name: str, python_version: str = "3.12") -> dict:
 
 @mcp.tool()
 def build_wheel(package_name: str, package_version: str = "",
-                python_version: str = "3.12") -> dict:
+                python_version: str = "3.12", arch: str = "aarch64") -> dict:
     """
     Dispara build externo de wheel aarch64 via GitHub Actions.
 
@@ -39,11 +39,12 @@ def build_wheel(package_name: str, package_version: str = "",
         package_name: Nome do pacote PyPI.
         package_version: Versão específica (vazio = latest).
         python_version: Versão Python alvo.
+        arch: Arquitetura alvo (aarch64, x86_64, armv7l, etc).
 
     Returns:
         dict: Status do build incluindo run_id.
     """
-    return _build_wheel(package_name, package_version, python_version)
+    return _build_wheel(package_name, package_version, python_version, arch)
 
 
 @mcp.tool()

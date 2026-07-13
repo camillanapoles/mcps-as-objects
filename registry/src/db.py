@@ -39,6 +39,7 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None):
     migrations = [
         (1, _migration_001_initial),
         (2, _migration_002_add_mcp_fields),
+        (3, _migration_003_add_arch_column),
     ]
 
     current = conn.execute("SELECT COALESCE(MAX(version), 0) FROM migrations").fetchone()[0]
@@ -126,3 +127,11 @@ def get_conn(db_path: Optional[Path] = None) -> sqlite3.Connection:
     conn = _get_connection(db_path)
     run_migrations(conn)
     return conn
+
+
+def _migration_003_add_arch_column(conn: sqlite3.Connection):
+    """Adiciona coluna arch à tabela mcps."""
+    try:
+        conn.execute("ALTER TABLE mcps ADD COLUMN arch TEXT NOT NULL DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
