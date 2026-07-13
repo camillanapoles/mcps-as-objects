@@ -20,6 +20,26 @@
       "version": "0.1.0",
       "manifest_hash": "9e672d8143eb499912423135feff616e91265100fbc449b7ad6d6f13de091aa4",
       "deps_hash": ""
+    },
+    "test-mcp": {
+      "version": "0.1.0",
+      "manifest_hash": "e764cd4aba061f840382b52a435d4bb21f95721d883df0dd17306abce2c07495",
+      "deps_hash": ""
+    },
+    "new-mcp": {
+      "version": "0.1.0",
+      "manifest_hash": "804c137d27320777caefaef6bc36bcac688aeacc49b319827aa4cfd2232cc6ce",
+      "deps_hash": ""
+    },
+    "dyn-test": {
+      "version": "0.1.0",
+      "manifest_hash": "e21a736e759f13535760ea1db38c479e7e9eb9b513b78c8f409835b6f4db8e03",
+      "deps_hash": ""
+    },
+    "e2e-test": {
+      "version": "0.1.0",
+      "manifest_hash": "55653712008f9f0a973a1c23a2547599568a81bf476d3cc764f06725f77b3f11",
+      "deps_hash": ""
     }
   }
 }
