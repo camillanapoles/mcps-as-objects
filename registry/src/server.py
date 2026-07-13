@@ -179,4 +179,3 @@ def platform_info() -> dict:
 
 if __name__ == "__main__":
     mcp.run()
-    mcp.run()
