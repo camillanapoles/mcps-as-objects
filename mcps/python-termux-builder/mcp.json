@@ -8,6 +8,7 @@
     "language": "python",
     "image": "ubuntu-22.04",
     "estimated_duration_sec": 120,
+    "arch": "aarch64",
     "dependencies": {
       "python": "requirements.txt"
     }
@@ -83,7 +84,7 @@
     },
     {
       "name": "build_wheel",
-      "description": "Dispara build externo de wheel aarch64 para Android via GitHub Actions. Usa gh CLI e o repositório android-wheel-factory.",
+      "description": "Dispara build externo de wheel para Android via GitHub Actions. Usa gh CLI e o repositório android-wheel-factory. Suporta aarch64, x86_64, armv7l, i686.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -104,6 +105,12 @@
             ],
             "default": "3.12",
             "description": "Versão do Python alvo."
+          },
+          "arch": {
+            "type": "string",
+            "enum": ["aarch64", "x86_64", "armv7l", "i686"],
+            "default": "aarch64",
+            "description": "Arquitetura alvo do build."
           }
         },
         "required": [
@@ -125,6 +132,9 @@
           "python_version": {
             "type": "string"
           },
+          "arch": {
+            "type": "string"
+          },
           "run_id": {
             "type": "string"
           },
@@ -142,7 +152,8 @@
           "success",
           "action",
           "package",
-          "python_version"
+          "python_version",
+          "arch"
         ]
       }
     },
