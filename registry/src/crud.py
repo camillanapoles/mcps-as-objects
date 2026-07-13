@@ -20,19 +20,22 @@ def register_mcp(conn: sqlite3.Connection, mcp_id: str) -> Optional[dict]:
 
     mhash = catalog.manifest_hash(mcp_id)
     manifest_path = str(catalog.ROOT / mcp_id / "mcp.json")
-
     conn.execute("""
-        INSERT INTO mcps (id, name, version, description, manifest_path, manifest_hash)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO mcps (id, name, version, description, manifest_path, manifest_hash, status, production_enabled, sdk)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name=excluded.name,
             version=excluded.version,
             description=excluded.description,
             manifest_path=excluded.manifest_path,
             manifest_hash=excluded.manifest_hash,
+            sdk=excluded.sdk,
             updated_at=CURRENT_TIMESTAMP
     """, (mcp_id, man["name"], man["version"], man.get("description", ""),
-          manifest_path, mhash))
+          manifest_path, mhash,
+          man.get("status", "TODO"),
+          man.get("production_enabled", False),
+          man.get("sdk", "python")))
 
     # Atualiza funções
     conn.execute("DELETE FROM functions WHERE mcp_id = ?", (mcp_id,))
@@ -78,6 +81,16 @@ def delete_mcp(conn: sqlite3.Connection, mcp_id: str) -> bool:
     cur = conn.execute("DELETE FROM mcps WHERE id = ?", (mcp_id,))
     conn.commit()
     return cur.rowcount > 0
+def update_mcp_status(conn: sqlite3.Connection, mcp_id: str, status: str) -> bool:
+    """Update the status of an MCP."""
+    cursor = conn.execute(
+        """
+        UPDATE mcps SET status = ? WHERE id = ?
+        """,
+        (status, mcp_id),
+    )
+    return cursor.rowcount > 0
+
 
 
 # ── Functions ─────────────────────────────────────────────────────

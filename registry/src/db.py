@@ -38,6 +38,7 @@ def run_migrations(conn: Optional[sqlite3.Connection] = None):
 
     migrations = [
         (1, _migration_001_initial),
+        (2, _migration_002_add_mcp_fields),
     ]
 
     current = conn.execute("SELECT COALESCE(MAX(version), 0) FROM migrations").fetchone()[0]
@@ -98,6 +99,20 @@ def _migration_001_initial(conn: sqlite3.Connection):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+
+def _migration_002_add_mcp_fields(conn: sqlite3.Connection):
+    """Adiciona colunas status, production_enabled e sdk à tabela mcps."""
+    # Add columns if they don't exist (SQLite doesn't support IF NOT EXISTS for ALTER, so catch errors)
+    for col, coltype in [
+        ("status", "TEXT NOT NULL DEFAULT 'TODO'"),
+        ("production_enabled", "INTEGER NOT NULL DEFAULT 0"),
+        ("sdk", "TEXT NOT NULL DEFAULT 'python'"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE mcps ADD COLUMN {col} {coltype}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
 
 def compute_manifest_hash(manifest_path: Path) -> str:
